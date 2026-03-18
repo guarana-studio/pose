@@ -160,13 +160,13 @@ describe(".input()", () => {
 // ---------------------------------------------------------------------------
 
 describe("nesting", () => {
-  it("renders a nested PozElement child", () => {
+  it("renders a nested PoseElement child", () => {
     const inner = pose.as("span").child("inner");
     const outer = pose.as("div").child(inner);
     expect(outer()).toEqual("<div><span>inner</span></div>");
   });
 
-  it("passes props down to nested PozElement", () => {
+  it("passes props down to nested PoseElement", () => {
     const schema = z.object({ name: z.string() });
     const inner = pose
       .as("span")
@@ -177,7 +177,7 @@ describe("nesting", () => {
     expect(outer({ name: "Ada" })).toEqual("<div><span>Ada</span></div>");
   });
 
-  it("renders an array of PozElements from a child fn", () => {
+  it("renders an array of PoseElement from a child fn", () => {
     const el = pose
       .as("ul")
       .input(z.object({ items: z.array(z.string()) }))
@@ -190,6 +190,16 @@ describe("nesting", () => {
     const el = pose.as("div").child(pose.as("div").child(pose.as("span").child("deep")));
 
     expect(el()).toEqual("<div><div><span>deep</span></div></div>");
+  });
+
+  it("conditionally renders nested elements", () => {
+    const el = pose
+      .as("div")
+      .input(z.object({ show: z.boolean().default(false) }))
+      .child(({ show }) => (show ? pose.as("p").child("shown") : undefined));
+
+    expect(el({ show: true })).toEqual("<div><p>shown</p></div>");
+    expect(el()).toEqual("<div></div>");
   });
 
   it("renders mixed static and dynamic children", () => {

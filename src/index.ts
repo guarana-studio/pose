@@ -95,8 +95,10 @@ export type Dyn<TProps, T> = T | ((props: TProps) => T);
 export type ChildValue =
   | string
   | number
+  | undefined
+  | null
   | PoseElement<any, any>
-  | Array<string | number | PoseElement<any, any>>;
+  | Array<string | number | PoseElement<any, any> | undefined | null>;
 
 export type Child<TProps> = ChildValue | ((props: TProps) => ChildValue);
 
@@ -106,9 +108,11 @@ type RenderReturn<TSchema extends StandardSchemaV1 | undefined> = TSchema extend
     : string
   : string;
 
-type CallArgs<TProps extends Record<string, unknown>> = [keyof TProps] extends [never]
-  ? [] | [TProps]
-  : [TProps];
+type CallArgs<TProps extends Record<string, unknown>, TSchema> = TSchema extends StandardSchemaV1
+  ? [Partial<TProps>?]
+  : [keyof TProps] extends [never]
+    ? [] | [TProps]
+    : [TProps];
 
 type ClassEntry<TProps> = string | ((props: TProps) => string);
 
@@ -120,7 +124,7 @@ export interface PoseElement<
   TProps extends Record<string, unknown>,
   TSchema extends StandardSchemaV1 | undefined = undefined,
 > {
-  (...args: CallArgs<TProps>): RenderReturn<TSchema>;
+  (...args: CallArgs<TProps, TSchema>): RenderReturn<TSchema>;
 
   readonly classes: ReadonlyArray<ClassEntry<TProps>>;
 
@@ -970,7 +974,7 @@ export interface PoseElement<
    * @example
    * const { html, css } = await card.render({ name: 'Ada' })
    */
-  render(...args: CallArgs<TProps>): Promise<{ html: string; css: string }>;
+  render(...args: CallArgs<TProps, TSchema>): Promise<{ html: string; css: string }>;
 }
 
 export interface Pose {
@@ -1011,7 +1015,11 @@ function resolveClasses<TProps>(classes: ReadonlyArray<ClassEntry<TProps>>, prop
 
 function renderChild(child: unknown, props: Record<string, unknown>): string {
   if (typeof child === "function") return renderChild((child as Function)(props), props);
-  if (Array.isArray(child)) return child.map((c) => renderChild(c, props)).join("");
+  if (Array.isArray(child))
+    return child
+      .filter((c) => c != null)
+      .map((c) => renderChild(c, props))
+      .join("");
   if (child != null && typeof child === "object" && "__pose" in child) {
     return (child as (p: Record<string, unknown>) => string)(props);
   }
