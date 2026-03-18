@@ -44,7 +44,8 @@ const { html, css } = await button.render({ variant: "primary" });
 ## Install
 
 ```bash
-bun add poze @unocss/core @unocss/preset-wind4
+bun add poze
+# optional
 bun add zod  # or valibot, arktype, any Standard Schema lib
 ```
 
