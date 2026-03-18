@@ -930,17 +930,17 @@ export interface PoseElement<
    * Apply styles conditionally — predicate form or value-switch form.
    *
    * Predicate form (apply when true):
-   * ```ts
+   * \`\`\`ts
    * .when(({ disabled }) => disabled, (b) => b.opacity(50).cursor_not_allowed())
-   * ```
+   * \`\`\`
    *
    * Value form (switch on a prop key):
-   * ```ts
+   * \`\`\`ts
    * .when("variant", {
    *   primary:   (b) => b.bg("indigo-600").text_color("white"),
    *   secondary: (b) => b.bg("slate-200").text_color("slate-900"),
    * })
-   * ```
+   * \`\`\`
    * Cases are Partial — unmatched values emit no classes.
    * Multiple .when() calls are independent and all evaluated at render time.
    */
@@ -972,7 +972,7 @@ export interface PoseElement<
   child(value: ChildValue): PoseElement<TProps, TSchema>;
 
   /**
-   * Render to `{ html, css }` using UnoCSS + presetWind4.
+   * Render to \`{ html, css }\` using UnoCSS + presetWind4.
    * @example
    * const { html, css } = await card.render({ name: 'Ada' })
    */
@@ -1031,7 +1031,7 @@ function renderChild(child: unknown, props: Record<string, unknown>): string {
   return child == null ? "" : String(child);
 }
 
-/** A tagless builder used inside .when() callbacks — only accumulates classes. */
+/** A tagless builder used inside .when() callbacks — only accumulates classes and children. */
 function createBlankBuilder<TProps extends Record<string, unknown>>(): PoseElement<
   TProps,
   undefined
@@ -1089,6 +1089,8 @@ function createBuilder<
   }
 
   (render as any).__pose = true;
+  // Expose state so applyBranch can read classes and children from a branch builder
+  (render as any).__state = state;
 
   const el = render as PoseElement<TProps, TSchema>;
 
@@ -1541,6 +1543,33 @@ function createBuilder<
   el.not_sr_only = () => cls("not-sr-only");
 
   // Pattern matching
+  //
+  // A branch builder is a blank PoseElement used as a collector — its
+  // accumulated classes AND children are both hoisted onto the parent.
+  // Classes resolve lazily via a ClassEntry fn; children via a Child fn.
+  // No regex, no innerHTML parsing needed.
+
+  function applyBranch(
+    getBranch: (props: TProps) => PoseElement<TProps, undefined> | null,
+  ): PoseElement<TProps, TSchema> {
+    const classEntry: ClassEntry<TProps> = (props) => {
+      const branch = getBranch(props);
+      return branch ? resolveClasses(branch.classes, props) : "";
+    };
+
+    const childEntry: Child<TProps> = (props: TProps) => {
+      const branch = getBranch(props);
+      if (!branch) return null;
+      const branchState: BuilderState<TProps> = (branch as any).__state;
+      if (!branchState.children.length) return null;
+      return branchState.children.map((c) =>
+        typeof c === "function" ? c(props) : c,
+      ) as ChildValue;
+    };
+
+    return derive([classEntry], [childEntry]);
+  }
+
   el.when = (...args: any[]): any => {
     if (typeof args[0] === "function") {
       // Predicate form: when(pred, apply)
@@ -1548,26 +1577,17 @@ function createBuilder<
         (props: TProps) => boolean,
         (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>,
       ];
-      return derive([
-        (props: TProps) => {
-          if (!pred(props)) return "";
-          return resolveClasses(apply(createBlankBuilder<TProps>()).classes, props);
-        },
-      ]);
+      return applyBranch((props) => (pred(props) ? apply(createBlankBuilder<TProps>()) : null));
     } else {
       // Value form: when(key, cases)
       const [key, cases] = args as [
         keyof TProps,
         Record<PropertyKey, (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>>,
       ];
-      return derive([
-        (props: TProps) => {
-          const value = props[key] as PropertyKey;
-          const branch = cases[value];
-          if (!branch) return "";
-          return resolveClasses(branch(createBlankBuilder<TProps>()).classes, props);
-        },
-      ]);
+      return applyBranch((props) => {
+        const branch = cases[props[key] as PropertyKey];
+        return branch ? branch(createBlankBuilder<TProps>()) : null;
+      });
     }
   };
 

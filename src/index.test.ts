@@ -202,6 +202,19 @@ describe("nesting", () => {
     expect(el()).toEqual("<div></div>");
   });
 
+  it("renders variant child", () => {
+    const el = pose
+      .as("div")
+      .input(z.object({ route: z.enum(["home", "about"]) }))
+      .when("route", {
+        home: (p) => p.child("Home"),
+        about: (p) => p.child("About"),
+      });
+
+    expect(el({ route: "home" })).toEqual("<div>Home</div>");
+    expect(el({ route: "about" })).toEqual("<div>About</div>");
+  });
+
   it("renders mixed static and dynamic children", () => {
     const el = pose
       .as("div")
