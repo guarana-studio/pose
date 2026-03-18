@@ -461,3 +461,178 @@ describe(".render()", () => {
     expect(html).toEqual("<p>hello</p>");
   });
 });
+
+// ---------------------------------------------------------------------------
+// .attr() — single attribute
+// ---------------------------------------------------------------------------
+
+describe(".attr()", () => {
+  it("renders a static attribute", () => {
+    expect(pose.as("a").attr("href", "/home")()).toEqual('<a href="/home"></a>');
+  });
+
+  it("renders a dynamic attribute from a function", () => {
+    const el = pose
+      .as("a")
+      .input(z.object({ url: z.string() }))
+      .attr("href", ({ url }) => url);
+
+    expect(el({ url: "/about" })).toEqual('<a href="/about"></a>');
+  });
+
+  it("omits the attribute when value is null", () => {
+    const el = pose
+      .as("a")
+      .input(z.object({ external: z.boolean().default(false) }))
+      .attr("target", ({ external }) => (external ? "_blank" : null));
+
+    expect(el({ external: true })).toEqual('<a target="_blank"></a>');
+    expect(el({ external: false })).toEqual("<a></a>");
+  });
+
+  it("renders a boolean attribute when value is empty string", () => {
+    const el = pose
+      .as("input")
+      .input(z.object({ required: z.boolean().default(false) }))
+      .attr("required", ({ required }) => (required ? "" : null));
+
+    expect(el({ required: true })).toEqual("<input required></input>");
+    expect(el({ required: false })).toEqual("<input></input>");
+  });
+
+  it("chains multiple .attr() calls", () => {
+    const el = pose.as("a").attr("href", "/home").attr("target", "_blank").attr("rel", "noopener");
+    expect(el()).toEqual('<a href="/home" target="_blank" rel="noopener"></a>');
+  });
+
+  it("renders attributes alongside classes", () => {
+    const el = pose.as("a").flex().text_color("blue-600").attr("href", "/home");
+    expect(el()).toEqual('<a class="flex text-blue-600" href="/home"></a>');
+  });
+
+  it("renders attributes with children", () => {
+    const el = pose.as("a").attr("href", "/home").child("Home");
+    expect(el()).toEqual('<a href="/home">Home</a>');
+  });
+
+  it("survives .input() placed after .attr()", () => {
+    const el = pose
+      .as("a")
+      .attr("target", "_blank")
+      .input(z.object({ url: z.string() }))
+      .attr("href", ({ url }) => url)
+      .child(({ url }) => url);
+
+    expect(el({ url: "/page" })).toEqual('<a target="_blank" href="/page">/page</a>');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// .attrs() — bulk attributes
+// ---------------------------------------------------------------------------
+
+describe(".attrs()", () => {
+  it("renders a static record of attributes", () => {
+    expect(pose.as("input").attrs({ type: "text", name: "email" })()).toEqual(
+      '<input type="text" name="email"></input>',
+    );
+  });
+
+  it("renders a record with dynamic values", () => {
+    const el = pose
+      .as("input")
+      .input(z.object({ field: z.string(), required: z.boolean().default(false) }))
+      .attrs({
+        type: "text",
+        name: ({ field }) => field,
+        required: ({ required }) => (required ? "" : null),
+      });
+
+    expect(el({ field: "email", required: true })).toEqual(
+      '<input type="text" name="email" required></input>',
+    );
+    expect(el({ field: "email", required: false })).toEqual(
+      '<input type="text" name="email"></input>',
+    );
+  });
+
+  it("omits null values from the record", () => {
+    const el = pose.as("div").attrs({ id: "box", "data-hidden": null });
+    expect(el()).toEqual('<div id="box"></div>');
+  });
+
+  it("renders a props function form", () => {
+    const el = pose
+      .as("a")
+      .input(z.object({ url: z.string(), external: z.boolean().default(false) }))
+      .attrs(({ url, external }) => ({
+        href: url,
+        target: external ? "_blank" : null,
+        rel: external ? "noopener noreferrer" : null,
+      }));
+
+    expect(el({ url: "/page", external: false })).toEqual('<a href="/page"></a>');
+    expect(el({ url: "https://example.com", external: true })).toEqual(
+      '<a href="https://example.com" target="_blank" rel="noopener noreferrer"></a>',
+    );
+  });
+
+  it("stacks multiple .attrs() calls", () => {
+    const el = pose
+      .as("input")
+      .attrs({ type: "text" })
+      .attrs({ autocomplete: "off", spellcheck: "false" });
+
+    expect(el()).toEqual('<input type="text" autocomplete="off" spellcheck="false"></input>');
+  });
+
+  it("renders attrs alongside classes and children", () => {
+    const el = pose
+      .as("a")
+      .input(z.object({ url: z.string(), label: z.string() }))
+      .flex()
+      .items_center()
+      .text_color("blue-600")
+      .attrs(({ url }) => ({ href: url, target: "_blank" }))
+      .child(({ label }) => label);
+
+    expect(el({ url: "/about", label: "About" })).toEqual(
+      '<a class="flex items-center text-blue-600" href="/about" target="_blank">About</a>',
+    );
+  });
+
+  it("mixes .attr() and .attrs()", () => {
+    const el = pose.as("a").attr("rel", "noopener").attrs({ href: "/home", target: "_blank" });
+
+    expect(el()).toEqual('<a rel="noopener" href="/home" target="_blank"></a>');
+  });
+
+  it("data-* attributes render correctly", () => {
+    const el = pose
+      .as("div")
+      .input(z.object({ id: z.string(), role: z.string() }))
+      .attrs({
+        "data-id": ({ id }) => id,
+        "data-role": ({ role }) => role,
+      });
+
+    expect(el({ id: "123", role: "admin" })).toEqual('<div data-id="123" data-role="admin"></div>');
+  });
+
+  it("aria-* attributes render correctly", () => {
+    const el = pose
+      .as("button")
+      .input(z.object({ expanded: z.boolean().default(false) }))
+      .attrs({
+        "aria-expanded": ({ expanded }) => String(expanded),
+        "aria-haspopup": "true",
+      });
+
+    expect(el({ expanded: true })).toEqual(
+      '<button aria-expanded="true" aria-haspopup="true"></button>',
+    );
+    expect(el({ expanded: false })).toEqual(
+      '<button aria-expanded="false" aria-haspopup="true"></button>',
+    );
+  });
+});

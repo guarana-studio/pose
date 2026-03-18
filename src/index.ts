@@ -118,6 +118,13 @@ type CallArgs<TProps extends Record<string, unknown>, TSchema> = TSchema extends
 
 type ClassEntry<TProps> = string | ((props: TProps) => string);
 
+/** null means the attribute is omitted from the rendered output */
+export type AttrValue = string | null;
+export type AttrRecord<TProps> = Record<string, Dyn<TProps, AttrValue>>;
+type AttrEntry<TProps> =
+  | [kind: "single", name: string, value: string | ((props: TProps) => AttrValue)]
+  | [kind: "record", fn: (props: TProps) => Record<string, AttrValue>];
+
 // ---------------------------------------------------------------------------
 // PoseElement interface
 // ---------------------------------------------------------------------------
@@ -958,6 +965,29 @@ export interface PoseElement<
     >,
   ): PoseElement<TProps, TSchema>;
 
+  // ── Attributes ───────────────────────────────────────────────────────────
+  /**
+   * Set a single HTML attribute. Value can be static or derived from props.
+   * Pass `null` to omit the attribute.
+   *
+   * @example
+   * pose.as('a').attr('href', ({ url }) => url).attr('target', '_blank')
+   */
+  attr(name: string, value: Dyn<TProps, AttrValue>): PoseElement<TProps, TSchema>;
+
+  /**
+   * Set multiple HTML attributes at once. Each value can be static or a
+   * `(props) => string | null` function. `null` omits the attribute.
+   *
+   * @example
+   * pose.as('input').attrs({ type: 'text', name: ({ field }) => field, required: ({ req }) => req ? '' : null })
+   * // or with a props function for multi-field logic:
+   * pose.as('a').attrs(({ url, external }) => ({ href: url, target: external ? '_blank' : null }))
+   */
+  attrs(
+    record: AttrRecord<TProps> | ((props: TProps) => Record<string, AttrValue>),
+  ): PoseElement<TProps, TSchema>;
+
   // ── Escape hatch ─────────────────────────────────────────────────────────
   /**
    * Append any raw Tailwind class — static or derived from props.
@@ -1007,6 +1037,7 @@ function arbitrary(value: string): string {
 interface BuilderState<TProps extends Record<string, unknown>> {
   tag: string;
   classes: ClassEntry<TProps>[];
+  attrs: AttrEntry<TProps>[];
   children: Child<TProps>[];
   schema: StandardSchemaV1 | undefined;
 }
@@ -1016,6 +1047,31 @@ function resolveClasses<TProps>(classes: ReadonlyArray<ClassEntry<TProps>>, prop
     .map((c) => (typeof c === "function" ? c(props) : c))
     .filter(Boolean)
     .join(" ");
+}
+
+function renderAttrPair(name: string, value: AttrValue): string {
+  if (value === null) return "";
+  return value === "" ? name : `${name}="${value}"`;
+}
+
+function resolveAttrs<TProps>(attrs: AttrEntry<TProps>[], props: TProps): string {
+  const parts: string[] = [];
+  for (const entry of attrs) {
+    if (entry[0] === "single") {
+      const [, name, value] = entry;
+      const resolved = typeof value === "function" ? value(props) : value;
+      const rendered = renderAttrPair(name, resolved);
+      if (rendered) parts.push(rendered);
+    } else {
+      // "record" — fn returns a whole object
+      const [, fn] = entry;
+      for (const [name, value] of Object.entries(fn(props))) {
+        const rendered = renderAttrPair(name, value);
+        if (rendered) parts.push(rendered);
+      }
+    }
+  }
+  return parts.join(" ");
 }
 
 function renderChild(child: unknown, props: Record<string, unknown>): string {
@@ -1039,6 +1095,7 @@ function createBlankBuilder<TProps extends Record<string, unknown>>(): PoseEleme
   return createBuilder<TProps, undefined>({
     tag: "div",
     classes: [],
+    attrs: [],
     children: [],
     schema: undefined,
   });
@@ -1051,10 +1108,12 @@ function createBuilder<
   function derive(
     extraClasses: ClassEntry<TProps>[] = [],
     extraChildren: Child<TProps>[] = [],
+    extraAttrs: AttrEntry<TProps>[] = [],
   ): PoseElement<TProps, TSchema> {
     return createBuilder<TProps, TSchema>({
       ...state,
       classes: [...state.classes, ...extraClasses],
+      attrs: [...state.attrs, ...extraAttrs],
       children: [...state.children, ...extraChildren],
     });
   }
@@ -1073,11 +1132,13 @@ function createBuilder<
 
   function buildHtml(resolvedProps: TProps): string {
     const classStr = resolveClasses(state.classes, resolvedProps);
+    const attrsStr = resolveAttrs(state.attrs, resolvedProps);
     const childrenStr = state.children
       .map((c) => renderChild(c, resolvedProps as Record<string, unknown>))
       .join("");
     const classAttr = classStr ? ` class="${classStr}"` : "";
-    return `<${state.tag}${classAttr}>${childrenStr}</${state.tag}>`;
+    const attrsAttr = attrsStr ? ` ${attrsStr}` : "";
+    return `<${state.tag}${classAttr}${attrsAttr}>${childrenStr}</${state.tag}>`;
   }
 
   function render(...args: CallArgs<TProps, TSchema>): any {
@@ -1100,6 +1161,7 @@ function createBuilder<
     createBuilder<StandardSchemaV1.InferOutput<S>, S>({
       tag: state.tag,
       classes: state.classes as unknown as ClassEntry<StandardSchemaV1.InferOutput<S>>[],
+      attrs: state.attrs as unknown as AttrEntry<StandardSchemaV1.InferOutput<S>>[],
       children: state.children as unknown as Child<StandardSchemaV1.InferOutput<S>>[],
       schema,
     });
@@ -1591,6 +1653,24 @@ function createBuilder<
     }
   };
 
+  // Attributes
+  el.attr = (name, value) =>
+    derive([], [], [["single", name, value as string | ((p: TProps) => AttrValue)]]);
+
+  el.attrs = (recordOrFn) => {
+    if (typeof recordOrFn === "function") {
+      // Props function: attrs(({ url, external }) => ({ href: url, target: external ? '_blank' : null }))
+      return derive([], [], [["record", recordOrFn as (p: TProps) => Record<string, AttrValue>]]);
+    }
+    // Static/dynamic record: attrs({ type: "text", name: ({ field }) => field })
+    const entries: AttrEntry<TProps>[] = Object.entries(recordOrFn).map(([name, value]) => [
+      "single",
+      name,
+      value as string | ((p: TProps) => AttrValue),
+    ]);
+    return derive([], [], entries);
+  };
+
   // Escape hatch
   el.cls = (value) => (typeof value === "function" ? derive([value]) : derive([value]));
 
@@ -1611,6 +1691,7 @@ function createBuilder<
     createBuilder<TProps, TSchema>({
       ...state,
       classes: [...state.classes],
+      attrs: [...state.attrs],
       children: [...state.children, value],
     });
 
@@ -1637,7 +1718,7 @@ async function getGenerator() {
 
 const pose: Pose = {
   as(tag) {
-    return createBuilder({ tag, classes: [], children: [], schema: undefined });
+    return createBuilder({ tag, classes: [], attrs: [], children: [], schema: undefined });
   },
 };
 
