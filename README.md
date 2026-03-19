@@ -29,7 +29,7 @@ const button = pose
   })
   .when(
     ({ disabled }) => disabled,
-    (b) => b.opacity(50).cursor_not_allowed(),
+    (b) => b.opacity(50).cursor_not_allowed().attr('disabled', "true"),
   )
   .child(({ variant }) => (variant === "primary" ? "Submit" : "Cancel"));
 
@@ -60,6 +60,8 @@ npx unocss "**/*.ts" -o output.css
 ```
 
 Because the HTML is plain strings, both tools pick up classes the same way they would from any other source file.
+
+For tighter control over what gets compiled, use `createPose()` and `getAllClasses()` to feed a precise class list to your CSS tool — see [CSS pipeline integration](#css-pipeline-integration) below.
 
 ## Core concepts
 
@@ -127,6 +129,16 @@ pose
 
 **`.child(value | fn)`** — append children. Accepts a string, number, another `PoseElement`, an array of those, or `(props) => any of the above`. Chainable — call it multiple times to append in order.
 
+**`.getClasses(props?)`** — returns the resolved class string for the given props without rendering a full HTML element. Useful for testing, introspection, or feeding classes into other systems:
+
+```ts
+button.getClasses({ variant: "primary" });
+// → "px-4 py-2 rounded font-semibold transition bg-indigo-600 text-white"
+
+button.getClasses({ variant: "secondary", disabled: true });
+// → "px-4 py-2 rounded font-semibold transition bg-slate-200 text-slate-900 opacity-50 cursor-not-allowed"
+```
+
 **`element(props)`** — render to an HTML string. Synchronous unless the bound schema uses async validation, in which case it returns `Promise<string>`.
 
 ## Composition
@@ -147,6 +159,59 @@ const card = pose
 card();
 // → <div class="p-4 rounded shadow-md"><img class="rounded-full w-8 h-8"></img><p class="text-sm">Hello</p></div>
 ```
+
+## CSS pipeline integration
+
+`createPose()` creates a dedicated instance that tracks every class registered across all elements built from it. Call `getAllClasses()` on the instance to get a deduplicated, space-separated string of every statically-known class — suitable for feeding directly to Tailwind or UnoCSS as a source file.
+
+```ts
+// components.ts
+import { createPose } from "poseui";
+
+export const pose = createPose();
+
+export const button = pose
+  .as("button")
+  .px(4).py(2).rounded().font_semibold()
+  .when("variant", {
+    primary: (b) => b.bg("indigo-600").text_color("white"),
+    secondary: (b) => b.bg("slate-200").text_color("slate-900"),
+  });
+
+export const badge = pose.as("span").text_xs().font_bold().rounded_full().px(2).py(1);
+```
+
+```ts
+// build.ts
+import { writeFileSync } from "fs";
+import { pose } from "./components";
+
+// Write all statically-known classes to a file your CSS tool can scan
+writeFileSync("pose-safelist.txt", pose.getAllClasses());
+// → "px-4 py-2 rounded font-semibold bg-indigo-600 text-white bg-slate-200
+//    text-slate-900 text-xs font-bold rounded-full px-2 py-1"
+```
+
+```bash
+npx @tailwindcss/cli -i input.css --content pose-safelist.txt -o dist.css
+```
+
+Or UnoCSS:
+
+```ts
+import { pose } from "./components";
+import { generateCSS, createGenerator } from 'unocss'
+import { presetWind4 } from '@unocss/preset-wind4'
+
+const uno = createGenerator({ presets: [presetWind4()] })
+
+const classes = pose.getAllClasses()
+const { css } = await uno.generate(classes)
+```
+
+`getAllClasses()` only collects static string entries. Classes produced by dynamic functions — e.g. `opacity(({ active }) => active ? 100 : 50)` — are intentionally excluded since their values are unknowable without props. Use `.cls()` with static strings or `.when()` with explicit branches for anything you need in the safelist.
+
+Each `createPose()` call returns a fully isolated instance with its own registry. The default `pose` export is itself a `createPose()` instance, usable as-is for projects that don't need the safelist feature.
 
 ## Validation errors
 

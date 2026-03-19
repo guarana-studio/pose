@@ -137,6 +137,17 @@ export interface PoseElement<
   readonly classes: ReadonlyArray<ClassEntry<TProps>>;
 
   /**
+   * Returns the resolved class string for the given props (or `{}` if the
+   * element has no props). Useful for inspecting what classes a component
+   * would emit without rendering a full HTML string.
+   *
+   * @example
+   * button.getClasses({ variant: "primary" })
+   * // → "px-4 py-2 rounded font-semibold transition bg-indigo-600 text-white"
+   */
+  getClasses(props?: CallArgs<TProps, TSchema>[0]): string;
+
+  /**
    * Bind a Standard Schema (Zod, Valibot, ArkType, …).
    * Infers TProps from output type; validates on every render.
    */
@@ -353,18 +364,12 @@ export interface PoseElement<
   opacity(value: Dyn<TProps, number | string>): PoseElement<TProps, TSchema>;
 
   // ── Background ───────────────────────────────────────────────────────────
-  bg_clip(
-    value: Dyn<TProps, "border" | "padding" | "content" | "text">,
-  ): PoseElement<TProps, TSchema>;
+  bg_clip(value: Dyn<TProps, "border" | "padding" | "content" | "text">): PoseElement<TProps, TSchema>;
   bg_size(value: Dyn<TProps, "auto" | "cover" | "contain">): PoseElement<TProps, TSchema>;
   bg_position(value: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
-  bg_repeat(
-    value?: Dyn<TProps, "x" | "y" | "round" | "space" | "none">,
-  ): PoseElement<TProps, TSchema>;
+  bg_repeat(value?: Dyn<TProps, "x" | "y" | "round" | "space" | "none">): PoseElement<TProps, TSchema>;
   bg_attachment(value: Dyn<TProps, "fixed" | "local" | "scroll">): PoseElement<TProps, TSchema>;
-  bg_gradient(
-    dir: Dyn<TProps, "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "tl">,
-  ): PoseElement<TProps, TSchema>;
+  bg_gradient(dir: Dyn<TProps, "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "tl">): PoseElement<TProps, TSchema>;
   from(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
   via(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
   to(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
@@ -659,6 +664,25 @@ export interface Pose {
   as<Tag extends keyof HTMLElementTagNameMap>(
     tag: Tag,
   ): PoseElement<Record<never, never>, undefined>;
+
+  /**
+   * Returns a deduplicated, space-separated string of every static class name
+   * registered across all elements created from this pose instance. Dynamic
+   * class entries (functions) are skipped — only statically-known strings are
+   * collected.
+   *
+   * Pass the result to Tailwind CLI or UnoCSS as a virtual source file so the
+   * build tool generates CSS for every class the instance can possibly emit.
+   *
+   * @example
+   * const myPose = createPose();
+   * const button = myPose.as("button").px(4).py(2).bg("indigo-600");
+   * const badge  = myPose.as("span").text_xs().font_bold();
+   *
+   * myPose.getAllClasses();
+   * // → "px-4 py-2 bg-indigo-600 text-xs font-bold"
+   */
+  getAllClasses(): string;
 }
 
 // ---------------------------------------------------------------------------
@@ -683,6 +707,8 @@ interface BuilderState<TProps extends Record<string, unknown>> {
   attrs: AttrEntry<TProps>[];
   children: Child<TProps>[];
   schema: StandardSchemaV1 | undefined;
+  /** Shared set owned by the Pose instance; undefined for blank/branch builders. */
+  registry: Set<ClassEntry<unknown>> | undefined;
 }
 
 function resolveClasses<TProps>(classes: ReadonlyArray<ClassEntry<TProps>>, props: TProps): string {
@@ -739,6 +765,7 @@ function createBlankBuilder<TProps extends Record<string, unknown>>(): PoseEleme
     attrs: [],
     children: [],
     schema: undefined,
+    registry: undefined,
   });
 }
 
@@ -746,11 +773,18 @@ function createBuilder<
   TProps extends Record<string, unknown>,
   TSchema extends StandardSchemaV1 | undefined = undefined,
 >(state: BuilderState<TProps>): PoseElement<TProps, TSchema> {
+  // Register all class entries with the pose instance registry
+  if (state.registry) {
+    for (const c of state.classes) state.registry.add(c as ClassEntry<unknown>);
+  }
   function derive(
     extraClasses: ClassEntry<TProps>[] = [],
     extraChildren: Child<TProps>[] = [],
     extraAttrs: AttrEntry<TProps>[] = [],
   ): PoseElement<TProps, TSchema> {
+    if (state.registry) {
+      for (const c of extraClasses) state.registry.add(c as ClassEntry<unknown>);
+    }
     return createBuilder<TProps, TSchema>({
       ...state,
       classes: [...state.classes, ...extraClasses],
@@ -797,6 +831,11 @@ function createBuilder<
 
   Object.defineProperty(el, "classes", { get: () => state.classes, enumerable: true });
 
+  el.getClasses = (props?: any): string => {
+    const resolvedProps = (props ?? {}) as TProps;
+    return resolveClasses(state.classes, resolvedProps);
+  };
+
   el.input = <S extends StandardSchemaV1<any, Record<string, unknown>>>(schema: S) =>
     createBuilder<StandardSchemaV1.InferOutput<S>, S>({
       tag: state.tag,
@@ -804,6 +843,7 @@ function createBuilder<
       attrs: state.attrs as unknown as AttrEntry<StandardSchemaV1.InferOutput<S>>[],
       children: state.children as unknown as Child<StandardSchemaV1.InferOutput<S>>[],
       schema,
+      registry: state.registry,
     });
 
   // Display
@@ -1272,12 +1312,33 @@ function createBuilder<
         (props: TProps) => boolean,
         (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>,
       ];
+
+      // Register static classes from the branch for getAllClasses()
+      const branchBuilder = apply(createBlankBuilder<TProps>());
+      for (const cls of branchBuilder.classes) {
+        if (typeof cls === "string" && state.registry) {
+          state.registry.add(cls);
+        }
+      }
+
       return applyBranch((props) => (pred(props) ? apply(createBlankBuilder<TProps>()) : null));
     } else {
       const [key, cases] = args as [
         keyof TProps,
         Record<PropertyKey, (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>>,
       ];
+
+      // Register static classes from all branches for getAllClasses()
+      for (const branchFn of Object.values(cases)) {
+        const branchBuilder = branchFn(createBlankBuilder<TProps>());
+        // Extract static classes from the branch builder
+        for (const cls of branchBuilder.classes) {
+          if (typeof cls === "string" && state.registry) {
+            state.registry.add(cls);
+          }
+        }
+      }
+
       return applyBranch((props) => {
         const branch = cases[props[key] as PropertyKey];
         return branch ? branch(createBlankBuilder<TProps>()) : null;
@@ -1311,6 +1372,7 @@ function createBuilder<
       classes: [...state.classes],
       attrs: [...state.attrs],
       children: [...state.children, value],
+      registry: state.registry,
     });
 
   return el;
@@ -1320,11 +1382,43 @@ function createBuilder<
 // Public API
 // ---------------------------------------------------------------------------
 
-const pose: Pose = {
-  as(tag) {
-    return createBuilder({ tag, classes: [], attrs: [], children: [], schema: undefined });
-  },
-};
+/**
+ * Create a dedicated Pose instance. All elements built from this instance
+ * register their class entries into a shared registry, enabling
+ * `getAllClasses()` to enumerate every static class the instance can emit.
+ *
+ * Use this when you want to collect classes across a component library for
+ * a Tailwind / UnoCSS build step:
+ *
+ * @example
+ * const pose = createPose();
+ *
+ * const button = pose.as("button").px(4).py(2).bg("indigo-600");
+ * const badge  = pose.as("span").text_xs().font_bold();
+ *
+ * // Feed this string to your CSS tool as a virtual source file:
+ * pose.getAllClasses();
+ * // → "px-4 py-2 bg-indigo-600 text-xs font-bold"
+ */
+export function createPose(): Pose {
+  const registry = new Set<ClassEntry<unknown>>();
+
+  return {
+    as(tag) {
+      return createBuilder({ tag, classes: [], attrs: [], children: [], schema: undefined, registry });
+    },
+    getAllClasses(): string {
+      const seen = new Set<string>();
+      for (const entry of registry) {
+        if (typeof entry === "string" && entry) seen.add(entry);
+      }
+      return [...seen].join(" ");
+    },
+  };
+}
+
+/** Default shared pose instance. */
+const pose: Pose = createPose();
 
 export const div = pose.as("div");
 
