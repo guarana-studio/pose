@@ -2,9 +2,9 @@
 
 > ⚠️ Prototype — API is unstable
 
-Type-safe HTML templating engine with a fluent Tailwind v4 builder API. Inspired by [gpui](https://www.gpui.rs/).
+Type-safe HTML templating engine with a fluent Tailwind-compatible builder API. Inspired by [gpui](https://www.gpui.rs/).
 
-Uses [UnoCSS](https://unocss.dev) + [presetWind4](https://unocss.dev/presets/wind4) for CSS generation and [Standard Schema](https://standardschema.dev) for prop validation.
+Zero dependencies. Fully synchronous. Emits HTML with utility class names — CSS generation is your pipeline's concern.
 
 ```ts
 import pose from "poseui";
@@ -33,12 +33,11 @@ const button = pose
   )
   .child(({ variant }) => (variant === "primary" ? "Submit" : "Cancel"));
 
-// just HTML — sync
 button({ variant: "primary" });
-// <button class="px-4 py-2 rounded font-semibold transition bg-indigo-600 text-white">Submit</button>
+// → <button class="px-4 py-2 rounded font-semibold transition bg-indigo-600 text-white">Submit</button>
 
-// HTML + generated CSS — async, runs UnoCSS
-const { html, css } = await button.render({ variant: "primary" });
+button({ variant: "secondary", disabled: true });
+// → <button class="px-4 py-2 rounded font-semibold transition bg-slate-200 text-slate-900 opacity-50 cursor-not-allowed">Cancel</button>
 ```
 
 ## Install
@@ -48,13 +47,27 @@ bun add poseui
 bun add zod  # or valibot, arktype, any Standard Schema lib
 ```
 
+## CSS
+
+Pose emits standard Tailwind-compatible class names and nothing else. Plug in whatever you already use:
+
+```bash
+# Tailwind v4
+npx @tailwindcss/cli -i input.css -o output.css
+
+# UnoCSS
+npx unocss "**/*.ts" -o output.css
+```
+
+Because the HTML is plain strings, both tools pick up classes the same way they would from any other source file.
+
 ## Core concepts
 
-**`pose.as(tag)`** — start a builder for any HTML tag.
+**`pose.as(tag)`** — start a builder for any HTML element tag.
 
-**`.input(schema)`** — bind a [Standard Schema](https://standardschema.dev) object schema. Infers `TProps` from the output type, so `.default()` transforms work. Validates on every render, throws `PoseValidationError` on failure.
+**`.input(schema)`** — bind a [Standard Schema](https://standardschema.dev) object schema. Infers `TProps` from the output type so `.default()` transforms work. Validates on every call and throws `PoseValidationError` on failure.
 
-**Style methods** — mirror Tailwind v4 utilities. Every method that takes a value also accepts `(props: TProps) => value` for one-off dynamic styles. See the source for the full list.
+**Style methods** — cover the full Tailwind utility surface: layout, spacing, typography, colour, borders, shadows, transforms, filters, animation, and more. Every method that takes a value also accepts `(props: TProps) => value` for dynamic styles. See the source for the complete list.
 
 **`.when(pred, apply)`** — apply styles when a predicate returns true:
 
@@ -62,7 +75,7 @@ bun add zod  # or valibot, arktype, any Standard Schema lib
 .when(({ disabled }) => disabled, (b) => b.opacity(50).cursor_not_allowed())
 ```
 
-**`.when(key, cases)`** — switch on a prop key and apply styles per matching case. Case keys are typed to the prop's actual union values — typos are compile errors:
+**`.when(key, cases)`** — switch on a prop key and apply styles per matching case. Case keys are typed to the prop's actual union — typos are compile errors:
 
 ```ts
 .when("size", {
@@ -72,9 +85,9 @@ bun add zod  # or valibot, arktype, any Standard Schema lib
 })
 ```
 
-Cases are `Partial` — unmatched values emit no classes. Multiple `.when()` calls stack independently.
+Cases are `Partial` — unmatched values emit nothing. Multiple `.when()` calls stack independently and are all evaluated at render time.
 
-**`.attr(name, value)`** — set a single HTML attribute. Value can be static or `(props) => string | null`. `null` omits the attribute; `""` renders it as a boolean attribute (`required`, `disabled`, etc.):
+**`.attr(name, value)`** — set a single HTML attribute. Value can be static or `(props) => string | null`. `null` omits the attribute entirely; `""` renders it as a boolean attribute (`required`, `disabled`, etc.):
 
 ```ts
 pose
@@ -85,17 +98,17 @@ pose
   .attr("rel", ({ external }) => (external ? "noopener noreferrer" : null));
 ```
 
-**`.attrs(record | fn)`** — set multiple attributes at once. Accepts a record of static/dynamic values, or a `(props) => Record<string, string | null>` function for when multiple attributes depend on each other:
+**`.attrs(record | fn)`** — set multiple attributes at once. Accepts a record of static/dynamic values, or a `(props) => Record<string, string | null>` function for when attributes depend on each other:
 
 ```ts
-// record form — each value is independently static or dynamic
+// record form
 pose.as("input").attrs({
   type: "text",
   name: ({ field }) => field,
   required: ({ required }) => (required ? "" : null),
 });
 
-// function form — whole object produced from props
+// function form
 pose.as("a").attrs(({ url, external }) => ({
   href: url,
   target: external ? "_blank" : null,
@@ -103,7 +116,7 @@ pose.as("a").attrs(({ url, external }) => ({
 }));
 ```
 
-**`.cls(value)`** — escape hatch for anything not in the builder. Accepts a raw class string or `(props) => string`.
+**`.cls(value)`** — escape hatch for anything not covered by the builder. Accepts a raw class string or `(props) => string`:
 
 ```ts
 pose
@@ -112,11 +125,28 @@ pose
   .cls(({ active }) => (active ? "ring-2 ring-blue-500" : ""));
 ```
 
-**`.child(value | fn)`** — append children. Accepts a string, number, another `PoseElement`, an array of those, or `(props: TProps) => any of the above`. Chainable.
+**`.child(value | fn)`** — append children. Accepts a string, number, another `PoseElement`, an array of those, or `(props) => any of the above`. Chainable — call it multiple times to append in order.
 
-**`element(props)`** — render to an HTML string synchronously. If the bound schema has async validation, returns `Promise<string>`.
+**`element(props)`** — render to an HTML string. Synchronous unless the bound schema uses async validation, in which case it returns `Promise<string>`.
 
-**`element.render(props)`** — render to `{ html, css }`. Runs UnoCSS against the rendered HTML to generate only the CSS rules that are actually used.
+## Composition
+
+`PoseElement` instances are valid children of other elements:
+
+```ts
+const avatar = pose.as("img").rounded_full().w(8).h(8);
+
+const card = pose
+  .as("div")
+  .p(4)
+  .rounded()
+  .shadow_md()
+  .child(avatar)
+  .child(pose.as("p").text_sm().child("Hello"));
+
+card();
+// → <div class="p-4 rounded shadow-md"><img class="rounded-full w-8 h-8"></img><p class="text-sm">Hello</p></div>
+```
 
 ## Validation errors
 
@@ -124,7 +154,7 @@ pose
 import { PoseValidationError } from "poseui";
 
 try {
-  button({ variant: "primary" });
+  button({ variant: "oops" });
 } catch (err) {
   if (err instanceof PoseValidationError) {
     console.log(err.issues); // StandardSchemaV1.Issue[]

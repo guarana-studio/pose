@@ -412,57 +412,6 @@ describe(".when() value switch form", () => {
 });
 
 // ---------------------------------------------------------------------------
-// .render() — CSS generation
-// ---------------------------------------------------------------------------
-
-describe(".render()", () => {
-  it("returns html and css", async () => {
-    const { html, css } = await pose.as("div").bg("blue-500").render();
-    expect(html).toEqual('<div class="bg-blue-500"></div>');
-    expect(css).toContain(".bg-blue-500{");
-  });
-
-  it("disabled preflight styles", async () => {
-    const { css } = await pose
-      .as("div")
-      .bg("blue-500")
-      .render({}, { generatorOptions: { preflights: false } });
-    expect(css).not.toContain("oklch(62.3% 0.214 259.815)");
-  });
-
-  it("generates css only for used classes", async () => {
-    const { css } = await pose.as("div").flex().p(4).render();
-    expect(css).toContain(".flex{");
-    expect(css).toContain(".p-4{");
-    expect(css).not.toContain(".bg-");
-  });
-
-  it("generates css for dynamically resolved classes", async () => {
-    const el = pose
-      .as("div")
-      .input(z.object({ active: z.boolean().default(false) }))
-      .when(
-        ({ active }) => active,
-        (b) => b.bg("green-500"),
-      );
-
-    const { html, css } = await el.render({ active: true });
-    expect(html).toContain("bg-green-500");
-    expect(css).toContain(".bg-green-500{");
-  });
-
-  it("passes props through to render", async () => {
-    const el = pose
-      .as("p")
-      .input(z.object({ text: z.string() }))
-      .child(({ text }) => text);
-
-    const { html } = await el.render({ text: "hello" });
-    expect(html).toEqual("<p>hello</p>");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // .attr() — single attribute
 // ---------------------------------------------------------------------------
 
