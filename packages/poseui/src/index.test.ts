@@ -691,7 +691,15 @@ describe("createPose() and getAllClasses()", () => {
     p.as("span").text_xs().font_bold().text_color("slate-500");
     const all = p.getAllClasses();
     // Every static class must appear; order isn't guaranteed
-    for (const cls of ["px-4", "py-2", "rounded", "font-semibold", "text-xs", "font-bold", "text-slate-500"]) {
+    for (const cls of [
+      "px-4",
+      "py-2",
+      "rounded",
+      "font-semibold",
+      "text-xs",
+      "font-bold",
+      "text-slate-500",
+    ]) {
       expect(all).toContain(cls);
     }
   });

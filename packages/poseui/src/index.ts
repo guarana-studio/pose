@@ -364,12 +364,18 @@ export interface PoseElement<
   opacity(value: Dyn<TProps, number | string>): PoseElement<TProps, TSchema>;
 
   // ── Background ───────────────────────────────────────────────────────────
-  bg_clip(value: Dyn<TProps, "border" | "padding" | "content" | "text">): PoseElement<TProps, TSchema>;
+  bg_clip(
+    value: Dyn<TProps, "border" | "padding" | "content" | "text">,
+  ): PoseElement<TProps, TSchema>;
   bg_size(value: Dyn<TProps, "auto" | "cover" | "contain">): PoseElement<TProps, TSchema>;
   bg_position(value: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
-  bg_repeat(value?: Dyn<TProps, "x" | "y" | "round" | "space" | "none">): PoseElement<TProps, TSchema>;
+  bg_repeat(
+    value?: Dyn<TProps, "x" | "y" | "round" | "space" | "none">,
+  ): PoseElement<TProps, TSchema>;
   bg_attachment(value: Dyn<TProps, "fixed" | "local" | "scroll">): PoseElement<TProps, TSchema>;
-  bg_gradient(dir: Dyn<TProps, "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "tl">): PoseElement<TProps, TSchema>;
+  bg_gradient(
+    dir: Dyn<TProps, "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "tl">,
+  ): PoseElement<TProps, TSchema>;
   from(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
   via(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
   to(color: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
@@ -1405,7 +1411,14 @@ export function createPose(): Pose {
 
   return {
     as(tag) {
-      return createBuilder({ tag, classes: [], attrs: [], children: [], schema: undefined, registry });
+      return createBuilder({
+        tag,
+        classes: [],
+        attrs: [],
+        children: [],
+        schema: undefined,
+        registry,
+      });
     },
     getAllClasses(): string {
       const seen = new Set<string>();

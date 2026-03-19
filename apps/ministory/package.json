@@ -1,0 +1,21 @@
+{
+  "name": "@poseui/ministory",
+  "private": true,
+  "type": "module",
+  "module": "src/index.html",
+  "scripts": {
+    "build": "bun build src/index.html",
+    "dev": "bun --hot src/index.html"
+  },
+  "dependencies": {
+    "dedent": "^1.7.2",
+    "poseui": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
