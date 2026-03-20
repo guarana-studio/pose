@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { match } from "@poseui/match";
+import type { AttrName, AttrValueFor, AttrsFor } from "./attrs";
 
 // ---------------------------------------------------------------------------
 // Standard Schema v1 spec — copied inline, no runtime dep.
@@ -100,8 +101,8 @@ export type ChildValue =
   | number
   | undefined
   | null
-  | PoseElement<any, any>
-  | Array<string | number | PoseElement<any, any> | undefined | null>;
+  | PoseElement<any, any, any>
+  | Array<string | number | PoseElement<any, any, any> | undefined | null>;
 
 export type Child<TProps> = ChildValue | ((props: TProps) => ChildValue);
 
@@ -130,51 +131,39 @@ export type AttrEntry<TProps> =
 // Preset
 // ---------------------------------------------------------------------------
 
-/**
- * A preset extends every `PoseElement` created by a `Pose` instance with
- * additional fluent methods. Presets use TypeScript declaration merging to
- * augment the `PoseElement` interface — import the preset file to get both
- * the runtime behaviour and the type extensions.
- *
- * @example
- * // tailwind4.ts
- * export const tailwind4: Preset<PoseElement<any, any>> = {
- *   name: "tailwind4",
- *   extend(el, { cls, dynCls }) {
- *     el.flex = () => cls("flex");
- *     el.p    = (n) => dynCls(n, (v) => `p-${v}`);
- *   },
- * };
- */
 export interface Preset<TElement> {
   readonly name: string;
   extend(
     element: TElement,
     helpers: {
-      /** Add a static class name. */
       cls(name: string): TElement;
-      /** Add a class derived from a value, static or dynamic. */
       dynCls<T>(raw: Dyn<Record<string, unknown>, T>, map: (v: T) => string): TElement;
     },
   ): void;
 }
 
 // ---------------------------------------------------------------------------
-// PoseElement interface — structural methods only.
-// Tailwind utility methods are added via the tailwind4 preset (declaration merging).
+// PoseElement
+//
+// Three type parameters:
+//   TProps — the props object shape (inferred from .input() schema)
+//   TSchema — the bound schema, or undefined
+//   TTag — the HTML tag name (from .as("button") etc.), carried through the
+//           entire chain so .attr() and .attrs() can infer valid names/values.
 // ---------------------------------------------------------------------------
 
 export interface PoseElement<
   TProps extends Record<string, unknown>,
   TSchema extends StandardSchemaV1 | undefined = undefined,
+  TTag extends string = string,
 > {
   (...args: CallArgs<TProps, TSchema>): RenderReturn<TSchema>;
 
   readonly classes: ReadonlyArray<ClassEntry<TProps>>;
 
   /**
-   * Returns the resolved class string for the given props without rendering
-   * a full HTML string. Useful for testing and introspection.
+   * Returns the resolved class string without rendering a full HTML string.
+   * Useful for testing and CSS pipeline inspection.
    *
    * @example
    * button.getClasses({ variant: "primary" })
@@ -188,11 +177,10 @@ export interface PoseElement<
    */
   input<S extends StandardSchemaV1<any, Record<string, unknown>>>(
     schema: S,
-  ): PoseElement<StandardSchemaV1.InferOutput<S>, S>;
+  ): PoseElement<StandardSchemaV1.InferOutput<S>, S, TTag>;
 
   /**
    * Apply styles conditionally — predicate form or value-switch form.
-   * Powered by @poseui/match internally.
    *
    * Predicate form (apply when true):
    * ```ts
@@ -207,55 +195,73 @@ export interface PoseElement<
    * })
    * ```
    */
-  when(
+  when<TWhenTag extends string>(
     pred: (props: TProps) => boolean,
-    apply: (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>,
-  ): PoseElement<TProps, TSchema>;
-  when<K extends keyof TProps>(
+    apply: (b: PoseElement<TProps, undefined, TWhenTag>) => PoseElement<TProps, any, TWhenTag>,
+  ): PoseElement<TProps, TSchema, TTag>;
+  when<K extends keyof TProps, TWhenTag extends string>(
     key: K,
     cases: Partial<
       Record<
         TProps[K] & PropertyKey,
-        (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>
+        (b: PoseElement<TProps, undefined, TWhenTag>) => PoseElement<TProps, any, TWhenTag>
       >
     >,
-  ): PoseElement<TProps, TSchema>;
+  ): PoseElement<TProps, TSchema, TTag>;
 
   /**
-   * Set a single HTML attribute. `null` omits it; `""` renders as a boolean
-   * attribute (`required`, `disabled`, etc.).
+   * Set a single HTML attribute. The attribute name is constrained to valid
+   * attributes for this element, and the value type is inferred from the
+   * attribute definition.
+   *
+   * `null` omits the attribute. `""` renders as a boolean attribute
+   * (`disabled=""`, `required=""`, etc.).
+   *
+   * Arbitrary `data-*` and `aria-*` attributes are always accepted.
    *
    * @example
-   * pose.as("a").attr("href", ({ url }) => url).attr("target", "_blank")
+   * pose.as("a").attr("href", "/home").attr("target", "_blank")
+   * pose.as("input").attr("type", "email").attr("required", "")
+   * pose.as("input").attr("type", "emal")    // ✗ TS error — invalid type value
+   * pose.as("button").attr("href", "/home")  // ✗ TS error — href not valid on button
    */
-  attr(name: string, value: Dyn<TProps, AttrValue>): PoseElement<TProps, TSchema>;
+  attr<K extends AttrName<TTag>>(
+    name: K,
+    value: Dyn<TProps, AttrValueFor<TTag, K & string> | null>,
+  ): PoseElement<TProps, TSchema, TTag>;
 
   /**
-   * Set multiple HTML attributes at once, as a static/dynamic record or a
-   * props function returning a record.
+   * Set multiple HTML attributes at once. Each key is constrained to valid
+   * attribute names for this element with inferred value types.
+   *
+   * Also accepts a props function for fully dynamic attributes.
    *
    * @example
+   * pose.as("input").attrs({ type: "email", required: "", placeholder: "Email" })
    * pose.as("a").attrs(({ url, external }) => ({
    *   href: url,
    *   target: external ? "_blank" : null,
    * }))
    */
   attrs(
-    record: AttrRecord<TProps> | ((props: TProps) => Record<string, AttrValue>),
-  ): PoseElement<TProps, TSchema>;
+    record:
+      | { [K in AttrName<TTag>]?: Dyn<TProps, AttrValueFor<TTag, K & string> | null> }
+      | ((
+          props: TProps,
+        ) => Partial<Record<keyof AttrsFor<TTag>, AttrValue>> & Record<string, AttrValue>),
+  ): PoseElement<TProps, TSchema, TTag>;
 
   /**
-   * Append a raw class string or dynamic class function — escape hatch for
-   * anything not covered by a preset.
+   * Append a raw class string or dynamic class function.
    *
    * @example
    * .cls("hover:opacity-75")
    * .cls(({ active }) => active ? "ring-2 ring-blue-500" : "")
    */
-  cls(value: Dyn<TProps, string>): PoseElement<TProps, TSchema>;
+  cls(value: Dyn<TProps, string>): PoseElement<TProps, TSchema, TTag>;
 
-  child(fn: (props: TProps) => ChildValue): PoseElement<TProps, TSchema>;
-  child(value: ChildValue): PoseElement<TProps, TSchema>;
+  child(fn: (props: TProps) => ChildValue): PoseElement<TProps, TSchema, TTag>;
+  child(value: ChildValue): PoseElement<TProps, TSchema, TTag>;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,16 +269,24 @@ export interface PoseElement<
 // ---------------------------------------------------------------------------
 
 export interface Pose {
+  /**
+   * Begin building a typed HTML element. The tag name flows through the chain
+   * as `TTag`, enabling `.attr()` and `.attrs()` to infer valid attribute
+   * names and their accepted value types for this specific element.
+   *
+   * @example
+   * pose.as("input").attr("type", "email")  // autocompletes input type values
+   * pose.as("a").attr("href", "/home")      // autocompletes anchor attrs
+   * pose.as("button").attr("href", "/x")   // TS error — href invalid on button
+   */
   as<Tag extends keyof HTMLElementTagNameMap>(
     tag: Tag,
-  ): PoseElement<Record<never, never>, undefined>;
+  ): PoseElement<Record<never, never>, undefined, Tag>;
 
   /**
    * Returns a deduplicated, space-separated string of every static class name
    * registered across all elements created from this pose instance.
-   * Dynamic class entries (functions) are skipped.
-   *
-   * Feed the result to Tailwind CLI or UnoCSS as a virtual source file.
+   * Feed to Tailwind CLI or UnoCSS as a virtual source file.
    */
   getAllClasses(): string;
 }
@@ -288,7 +302,7 @@ export interface BuilderState<TProps extends Record<string, unknown>> {
   children: Child<TProps>[];
   schema: StandardSchemaV1 | undefined;
   registry: Set<ClassEntry<unknown>> | undefined;
-  presets: Preset<PoseElement<any, any>>[];
+  presets: Preset<PoseElement<any, any, any>>[];
 }
 
 function resolveClasses<TProps>(classes: ReadonlyArray<ClassEntry<TProps>>, props: TProps): string {
@@ -336,10 +350,11 @@ function renderChild(child: unknown, props: Record<string, unknown>): string {
 }
 
 function createBlankBuilder<TProps extends Record<string, unknown>>(
-  presets: Preset<PoseElement<any, any>>[],
-): PoseElement<TProps, undefined> {
-  return createBuilder<TProps, undefined>({
-    tag: "div",
+  presets: Preset<PoseElement<any, any, any>>[],
+  tag: string = "div",
+): PoseElement<TProps, undefined, string> {
+  return createBuilder<TProps, undefined, string>({
+    tag,
     classes: [],
     attrs: [],
     children: [],
@@ -352,25 +367,21 @@ function createBlankBuilder<TProps extends Record<string, unknown>>(
 export function createBuilder<
   TProps extends Record<string, unknown>,
   TSchema extends StandardSchemaV1 | undefined = undefined,
->(state: BuilderState<TProps>): PoseElement<TProps, TSchema> {
-  // Register all class entries with the pose instance registry
+  TTag extends string = string,
+>(state: BuilderState<TProps>): PoseElement<TProps, TSchema, TTag> {
   if (state.registry) {
     for (const c of state.classes) state.registry.add(c as ClassEntry<unknown>);
   }
-
-  // ---------------------------------------------------------------------------
-  // Helpers exposed to presets
-  // ---------------------------------------------------------------------------
 
   function derive(
     extraClasses: ClassEntry<TProps>[] = [],
     extraChildren: Child<TProps>[] = [],
     extraAttrs: AttrEntry<TProps>[] = [],
-  ): PoseElement<TProps, TSchema> {
+  ): PoseElement<TProps, TSchema, TTag> {
     if (state.registry) {
       for (const c of extraClasses) state.registry.add(c as ClassEntry<unknown>);
     }
-    return createBuilder<TProps, TSchema>({
+    return createBuilder<TProps, TSchema, TTag>({
       ...state,
       classes: [...state.classes, ...extraClasses],
       attrs: [...state.attrs, ...extraAttrs],
@@ -378,21 +389,20 @@ export function createBuilder<
     });
   }
 
-  function cls(name: string): PoseElement<TProps, TSchema> {
+  function cls(name: string): PoseElement<TProps, TSchema, TTag> {
     return derive([name]);
   }
 
-  function dynCls<T>(raw: Dyn<TProps, T>, map: (v: T) => string): PoseElement<TProps, TSchema> {
+  function dynCls<T>(
+    raw: Dyn<TProps, T>,
+    map: (v: T) => string,
+  ): PoseElement<TProps, TSchema, TTag> {
     if (typeof raw === "function") {
       const fn = raw as (p: TProps) => T;
       return derive([(props: TProps) => map(fn(props))]);
     }
     return derive([map(raw as T)]);
   }
-
-  // ---------------------------------------------------------------------------
-  // HTML rendering
-  // ---------------------------------------------------------------------------
 
   function buildHtml(resolvedProps: TProps): string {
     const classStr = resolveClasses(state.classes, resolvedProps);
@@ -416,18 +426,14 @@ export function createBuilder<
   (render as any).__pose = true;
   (render as any).__state = state;
 
-  const el = render as PoseElement<TProps, TSchema>;
+  const el = render as PoseElement<TProps, TSchema, TTag>;
 
   Object.defineProperty(el, "classes", { get: () => state.classes, enumerable: true });
-
-  // ---------------------------------------------------------------------------
-  // Core methods
-  // ---------------------------------------------------------------------------
 
   el.getClasses = (props?: any): string => resolveClasses(state.classes, (props ?? {}) as TProps);
 
   el.input = <S extends StandardSchemaV1<any, Record<string, unknown>>>(schema: S) =>
-    createBuilder<StandardSchemaV1.InferOutput<S>, S>({
+    createBuilder<StandardSchemaV1.InferOutput<S>, S, TTag>({
       tag: state.tag,
       classes: state.classes as unknown as ClassEntry<StandardSchemaV1.InferOutput<S>>[],
       attrs: state.attrs as unknown as AttrEntry<StandardSchemaV1.InferOutput<S>>[],
@@ -437,13 +443,11 @@ export function createBuilder<
       presets: state.presets,
     });
 
-  // ---------------------------------------------------------------------------
   // .when() — powered by @poseui/match
-  // ---------------------------------------------------------------------------
 
   function applyBranch(
-    getBranch: (props: TProps) => PoseElement<TProps, undefined> | null,
-  ): PoseElement<TProps, TSchema> {
+    getBranch: (props: TProps) => PoseElement<TProps, undefined, TTag> | null,
+  ): PoseElement<TProps, TSchema, TTag> {
     const classEntry: ClassEntry<TProps> = (props) => {
       const branch = getBranch(props);
       return branch ? resolveClasses(branch.classes, props) : "";
@@ -466,23 +470,32 @@ export function createBuilder<
     if (typeof args[0] === "function") {
       const [pred, apply] = args as [
         (props: TProps) => boolean,
-        (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>,
+        (b: PoseElement<TProps, undefined, TTag>) => PoseElement<TProps, any, TTag>,
       ];
 
-      // Pre-evaluate branch to register static classes for getAllClasses()
-      const previewBranch = apply(createBlankBuilder<TProps>(state.presets));
+      const blank = createBlankBuilder<TProps>(state.presets, state.tag) as PoseElement<
+        TProps,
+        undefined,
+        TTag
+      >;
+      const previewBranch = apply(blank);
       for (const c of previewBranch.classes) {
         if (typeof c === "string" && state.registry) state.registry.add(c);
       }
 
       return applyBranch(
         (props) =>
-          // Use match internally to evaluate the predicate
-          match<Record<string, unknown>, PoseElement<TProps, undefined>>(
+          match<Record<string, unknown>, PoseElement<TProps, undefined, TTag>>(
             props as Record<string, unknown>,
           )
             .when(pred as (v: Record<string, unknown>) => boolean, () =>
-              apply(createBlankBuilder<TProps>(state.presets)),
+              apply(
+                createBlankBuilder<TProps>(state.presets, state.tag) as PoseElement<
+                  TProps,
+                  undefined,
+                  TTag
+                >,
+              ),
             )
             .first() ?? null,
       );
@@ -490,12 +503,19 @@ export function createBuilder<
 
     const [key, cases] = args as [
       keyof TProps,
-      Record<PropertyKey, (b: PoseElement<TProps, undefined>) => PoseElement<TProps, any>>,
+      Record<
+        PropertyKey,
+        (b: PoseElement<TProps, undefined, TTag>) => PoseElement<TProps, any, TTag>
+      >,
     ];
 
-    // Pre-evaluate all branches to register static classes for getAllClasses()
     for (const branchFn of Object.values(cases)) {
-      const previewBranch = branchFn(createBlankBuilder<TProps>(state.presets));
+      const blank = createBlankBuilder<TProps>(state.presets, state.tag) as PoseElement<
+        TProps,
+        undefined,
+        TTag
+      >;
+      const previewBranch = branchFn(blank);
       for (const c of previewBranch.classes) {
         if (typeof c === "string" && state.registry) state.registry.add(c);
       }
@@ -503,18 +523,26 @@ export function createBuilder<
 
     return applyBranch((props) => {
       const branchFn = cases[props[key] as PropertyKey];
-      return branchFn ? branchFn(createBlankBuilder<TProps>(state.presets)) : null;
+      return branchFn
+        ? branchFn(
+            createBlankBuilder<TProps>(state.presets, state.tag) as PoseElement<
+              TProps,
+              undefined,
+              TTag
+            >,
+          )
+        : null;
     });
   };
 
-  // ---------------------------------------------------------------------------
-  // Attributes
-  // ---------------------------------------------------------------------------
+  // .attr() — name constrained to AttrName<TTag>, value to AttrValueFor<TTag, K>
 
-  el.attr = (name, value) =>
+  el.attr = (name: any, value: any) =>
     derive([], [], [["single", name, value as string | ((p: TProps) => AttrValue)]]);
 
-  el.attrs = (recordOrFn) => {
+  // .attrs() — record keys constrained to AttrName<TTag>
+
+  el.attrs = (recordOrFn: any) => {
     if (typeof recordOrFn === "function") {
       return derive([], [], [["record", recordOrFn as (p: TProps) => Record<string, AttrValue>]]);
     }
@@ -526,18 +554,14 @@ export function createBuilder<
     return derive([], [], entries);
   };
 
-  // ---------------------------------------------------------------------------
-  // Escape hatch
-  // ---------------------------------------------------------------------------
+  // .cls()
 
   el.cls = (value) => derive([value as ClassEntry<TProps>]);
 
-  // ---------------------------------------------------------------------------
-  // Children
-  // ---------------------------------------------------------------------------
+  // .child()
 
   el.child = (value: any) =>
-    createBuilder<TProps, TSchema>({
+    createBuilder<TProps, TSchema, TTag>({
       ...state,
       classes: [...state.classes],
       attrs: [...state.attrs],
@@ -546,9 +570,7 @@ export function createBuilder<
       presets: state.presets,
     });
 
-  // ---------------------------------------------------------------------------
-  // Apply presets — each preset receives the element and the typed helpers
-  // ---------------------------------------------------------------------------
+  // Apply presets
 
   const presetHelpers = {
     cls: (name: string) => cls(name),
@@ -568,30 +590,16 @@ export function createBuilder<
 // ---------------------------------------------------------------------------
 
 export interface CreatePoseOptions {
-  presets?: Preset<PoseElement<any, any>>[];
+  presets?: Preset<PoseElement<any, any, any>>[];
 }
 
-/**
- * Create a dedicated Pose instance, optionally with presets that extend every
- * element with additional fluent methods.
- *
- * Import a preset file to get both runtime behaviour and type augmentation
- * via declaration merging.
- *
- * @example
- * import { createPose } from "poseui";
- * import { tailwind4 } from "poseui/presets";
- *
- * const pose = createPose({ presets: [tailwind4] });
- * const button = pose.as("button").flex().px(4).bg("indigo-600");
- */
 export function createPose(options: CreatePoseOptions = {}): Pose {
   const { presets = [] } = options;
   const registry = new Set<ClassEntry<unknown>>();
 
   return {
-    as(tag) {
-      return createBuilder({
+    as<Tag extends keyof HTMLElementTagNameMap>(tag: Tag) {
+      return createBuilder<Record<never, never>, undefined, Tag>({
         tag,
         classes: [],
         attrs: [],

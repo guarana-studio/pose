@@ -1,7 +1,8 @@
-import { it, expect, describe } from "bun:test";
+import { it, expect, describe, expectTypeOf } from "bun:test";
 import { PoseValidationError, div, createPose } from "./";
 import { z } from "zod";
 import { tailwind4 } from "./presets";
+import type { PoseElement } from "./";
 
 // ---------------------------------------------------------------------------
 // Basic rendering
@@ -141,7 +142,7 @@ describe(".input()", () => {
 
     try {
       el({ name: "" });
-      expect(true).toBe(false); // should not reach
+      expect(true).toBe(false);
     } catch (err) {
       expect(err).toBeInstanceOf(PoseValidationError);
       const e = err as PoseValidationError;
@@ -351,7 +352,6 @@ describe(".when() value switch form", () => {
       .input(z.object({ variant: z.enum(["primary", "secondary", "ghost"]).default("primary") }))
       .when("variant", {
         primary: (b) => b.bg("blue-500"),
-        // secondary and ghost intentionally omitted
       });
 
     expect(el({ variant: "ghost" })).toEqual("<button></button>");
@@ -569,7 +569,6 @@ describe(".attrs()", () => {
 
   it("mixes .attr() and .attrs()", () => {
     const el = pose.as("a").attr("rel", "noopener").attrs({ href: "/home", target: "_blank" });
-
     expect(el()).toEqual('<a rel="noopener" href="/home" target="_blank"></a>');
   });
 
@@ -647,7 +646,6 @@ describe(".getClasses()", () => {
         (b) => b.ring_w(2),
       );
 
-    // active defaults to false → no ring class
     expect(el.getClasses()).toEqual("flex");
   });
 
@@ -689,7 +687,6 @@ describe("createPose() and getAllClasses()", () => {
     const a = createPose({ presets: [tailwind4] });
     const b = createPose({ presets: [tailwind4] });
     a.as("div").flex().p(4);
-    // b has no elements — its registry is empty
     expect(b.getAllClasses()).toEqual("");
   });
 
@@ -709,7 +706,6 @@ describe("createPose() and getAllClasses()", () => {
     p.as("button").px(4).py(2).rounded().font_semibold();
     p.as("span").text_xs().font_bold().text_color("slate-500");
     const all = p.getAllClasses();
-    // Every static class must appear; order isn't guaranteed
     for (const cls of [
       "px-4",
       "py-2",
@@ -728,7 +724,6 @@ describe("createPose() and getAllClasses()", () => {
     p.as("div").flex().gap(4);
     p.as("section").flex().gap(4).p(8);
     const classes = p.getAllClasses().split(" ");
-    // "flex" and "gap-4" should each appear exactly once
     expect(classes.filter((c) => c === "flex").length).toBe(1);
     expect(classes.filter((c) => c === "gap-4").length).toBe(1);
   });
@@ -738,19 +733,16 @@ describe("createPose() and getAllClasses()", () => {
     p.as("div")
       .input(z.object({ active: z.boolean().default(false) }))
       .flex()
-      .opacity(({ active }) => (active ? 100 : 50)); // dynamic — cannot be statically known
+      .opacity(({ active }) => (active ? 100 : 50));
 
     const all = p.getAllClasses();
     expect(all).toContain("flex");
-    // The dynamic opacity value is unknowable — neither "opacity-100" nor "opacity-50"
-    // should appear since the entry is a function
     expect(all).not.toContain("opacity-100");
     expect(all).not.toContain("opacity-50");
   });
 
   it("picks up classes added through fluent chaining after .as()", () => {
     const p = createPose({ presets: [tailwind4] });
-    // Each chained method calls derive(), which registers into the same registry
     p.as("div").flex().flex_col().items_center().justify_between().gap(6);
     const all = p.getAllClasses();
     for (const cls of ["flex", "flex-col", "items-center", "justify-between", "gap-6"]) {
@@ -767,7 +759,6 @@ describe("createPose() and getAllClasses()", () => {
         secondary: (b) => b.bg("slate-200").text_color("slate-900"),
       });
 
-    // Branch classes are static strings — they must all be registered
     const all = p.getAllClasses();
     for (const cls of ["bg-indigo-600", "text-white", "bg-slate-200", "text-slate-900"]) {
       expect(all).toContain(cls);
@@ -776,22 +767,535 @@ describe("createPose() and getAllClasses()", () => {
 
   it("isolates registries — default pose export does not bleed into createPose()", () => {
     const p = createPose({ presets: [tailwind4] });
-    // Build something on the isolated instance only
     p.as("div").shadow_xl().overflow_hidden();
     const isolated = p.getAllClasses();
     expect(isolated).toContain("shadow-xl");
     expect(isolated).toContain("overflow-hidden");
-    // The default pose export's getAllClasses() should NOT contain these
-    // (unless they were added elsewhere in this test run, which they haven't been)
-    // We just verify the isolated instance has exactly what we registered
-    const classes = isolated.split(" ");
-    expect(classes).toContain("shadow-xl");
-    expect(classes).toContain("overflow-hidden");
   });
 
   it("getAllClasses() is stable across multiple calls", () => {
     const p = createPose({ presets: [tailwind4] });
     p.as("div").flex().p(4).rounded();
     expect(p.getAllClasses()).toEqual(p.getAllClasses());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TTag — attr inference per element
+// ---------------------------------------------------------------------------
+
+describe("attr inference — tag-specific attribute names", () => {
+  const pose = createPose({ presets: [tailwind4] });
+
+  // ── Anchor ──────────────────────────────────────────────────────────────
+
+  it("<a> renders href, target, rel", () => {
+    expect(
+      pose.as("a").attr("href", "/home").attr("target", "_blank").attr("rel", "noopener")(),
+    ).toEqual('<a href="/home" target="_blank" rel="noopener"></a>');
+  });
+
+  it("<a> omits target when null", () => {
+    expect(pose.as("a").attr("href", "/home").attr("target", null)()).toEqual(
+      '<a href="/home"></a>',
+    );
+  });
+
+  it("<a> renders download attribute", () => {
+    expect(pose.as("a").attr("href", "/file.pdf").attr("download", "report.pdf")()).toEqual(
+      '<a href="/file.pdf" download="report.pdf"></a>',
+    );
+  });
+
+  // ── Button ───────────────────────────────────────────────────────────────
+
+  it("<button> renders type attribute", () => {
+    expect(pose.as("button").attr("type", "submit")()).toEqual('<button type="submit"></button>');
+    expect(pose.as("button").attr("type", "reset")()).toEqual('<button type="reset"></button>');
+    expect(pose.as("button").attr("type", "button")()).toEqual('<button type="button"></button>');
+  });
+
+  it("<button> renders disabled as boolean attribute", () => {
+    expect(pose.as("button").attr("disabled", "")()).toEqual("<button disabled></button>");
+  });
+
+  it("<button> omits disabled when null", () => {
+    expect(pose.as("button").attr("disabled", null)()).toEqual("<button></button>");
+  });
+
+  it("<button> renders name and value", () => {
+    expect(pose.as("button").attr("name", "action").attr("value", "submit")()).toEqual(
+      '<button name="action" value="submit"></button>',
+    );
+  });
+
+  it("<button> renders form association", () => {
+    expect(pose.as("button").attr("form", "signup-form")()).toEqual(
+      '<button form="signup-form"></button>',
+    );
+  });
+
+  it("<button> renders formaction and formmethod", () => {
+    expect(pose.as("button").attr("formaction", "/alt").attr("formmethod", "post")()).toEqual(
+      '<button formaction="/alt" formmethod="post"></button>',
+    );
+  });
+
+  // ── Input ────────────────────────────────────────────────────────────────
+
+  it("<input> renders type values — email, password, number, checkbox, etc.", () => {
+    const types = [
+      "text",
+      "email",
+      "password",
+      "number",
+      "checkbox",
+      "radio",
+      "file",
+      "date",
+      "time",
+      "tel",
+      "url",
+      "search",
+      "range",
+      "color",
+      "hidden",
+      "submit",
+      "reset",
+      "button",
+      "image",
+      "month",
+      "week",
+      "datetime-local",
+    ] as const;
+    for (const type of types) {
+      expect(pose.as("input").attr("type", type)()).toEqual(`<input type="${type}"></input>`);
+    }
+  });
+
+  it("<input> renders placeholder, name, id", () => {
+    expect(
+      pose.as("input").attrs({ name: "email", placeholder: "you@example.com", id: "email" })(),
+    ).toEqual('<input name="email" placeholder="you@example.com" id="email"></input>');
+  });
+
+  it("<input> renders required as boolean attribute", () => {
+    expect(pose.as("input").attr("required", "")()).toEqual("<input required></input>");
+  });
+
+  it("<input> renders readonly as boolean attribute", () => {
+    expect(pose.as("input").attr("readonly", "")()).toEqual("<input readonly></input>");
+  });
+
+  it("<input> renders disabled as boolean attribute", () => {
+    expect(pose.as("input").attr("disabled", "")()).toEqual("<input disabled></input>");
+  });
+
+  it("<input> renders checked as boolean attribute", () => {
+    expect(pose.as("input").attr("checked", "")()).toEqual("<input checked></input>");
+  });
+
+  it("<input> renders multiple as boolean attribute", () => {
+    expect(pose.as("input").attr("multiple", "")()).toEqual("<input multiple></input>");
+  });
+
+  it("<input> renders min, max, step, maxlength", () => {
+    expect(pose.as("input").attrs({ type: "number", min: "0", max: "100", step: "1" })()).toEqual(
+      '<input type="number" min="0" max="100" step="1"></input>',
+    );
+  });
+
+  it("<input> renders autocomplete", () => {
+    expect(pose.as("input").attr("autocomplete", "email")()).toEqual(
+      '<input autocomplete="email"></input>',
+    );
+  });
+
+  // ── Textarea ──────────────────────────────────────────────────────────────
+
+  it("<textarea> renders rows, cols, placeholder", () => {
+    expect(
+      pose.as("textarea").attrs({ rows: "4", cols: "40", placeholder: "Your message" })(),
+    ).toEqual('<textarea rows="4" cols="40" placeholder="Your message"></textarea>');
+  });
+
+  it("<textarea> renders disabled and readonly as boolean attributes", () => {
+    expect(pose.as("textarea").attr("disabled", "").attr("readonly", "")()).toEqual(
+      "<textarea disabled readonly></textarea>",
+    );
+  });
+
+  it("<textarea> renders wrap attribute", () => {
+    expect(pose.as("textarea").attr("wrap", "hard")()).toEqual('<textarea wrap="hard"></textarea>');
+  });
+
+  // ── Select ───────────────────────────────────────────────────────────────
+
+  it("<select> renders name, required, disabled, multiple", () => {
+    expect(
+      pose.as("select").attrs({ name: "country", required: "", disabled: "", multiple: "" })(),
+    ).toEqual('<select name="country" required disabled multiple></select>');
+  });
+
+  it("<select> renders size", () => {
+    expect(pose.as("select").attr("size", "5")()).toEqual('<select size="5"></select>');
+  });
+
+  // ── Option / Optgroup ─────────────────────────────────────────────────────
+
+  it("<option> renders value, selected, disabled", () => {
+    expect(
+      pose
+        .as("option")
+        .attrs({ value: "gb", selected: "", disabled: "" })
+        .child("United Kingdom")(),
+    ).toEqual('<option value="gb" selected disabled>United Kingdom</option>');
+  });
+
+  it("<optgroup> renders label and disabled", () => {
+    expect(pose.as("optgroup").attrs({ label: "Europe", disabled: "" })()).toEqual(
+      '<optgroup label="Europe" disabled></optgroup>',
+    );
+  });
+
+  // ── Form ──────────────────────────────────────────────────────────────────
+
+  it("<form> renders action, method, enctype", () => {
+    expect(
+      pose.as("form").attrs({
+        action: "/submit",
+        method: "post",
+        enctype: "multipart/form-data",
+      })(),
+    ).toEqual('<form action="/submit" method="post" enctype="multipart/form-data"></form>');
+  });
+
+  it("<form> renders novalidate as boolean attribute", () => {
+    expect(pose.as("form").attr("novalidate", "")()).toEqual("<form novalidate></form>");
+  });
+
+  it("<form> renders target", () => {
+    expect(pose.as("form").attr("target", "_blank")()).toEqual('<form target="_blank"></form>');
+  });
+
+  // ── Label ────────────────────────────────────────────────────────────────
+
+  it("<label> renders for attribute (IDL htmlFor → content attr for)", () => {
+    expect(pose.as("label").attr("for", "email").child("Email")()).toEqual(
+      '<label for="email">Email</label>',
+    );
+  });
+
+  // ── Img ──────────────────────────────────────────────────────────────────
+
+  it("<img> renders src, alt, width, height", () => {
+    expect(
+      pose.as("img").attrs({ src: "/logo.png", alt: "Logo", width: "200", height: "50" })(),
+    ).toEqual('<img src="/logo.png" alt="Logo" width="200" height="50"></img>');
+  });
+
+  it("<img> renders loading=lazy", () => {
+    expect(pose.as("img").attr("loading", "lazy")()).toEqual('<img loading="lazy"></img>');
+  });
+
+  it("<img> renders decoding attribute", () => {
+    expect(pose.as("img").attr("decoding", "async")()).toEqual('<img decoding="async"></img>');
+  });
+
+  it("<img> renders srcset and sizes", () => {
+    expect(
+      pose.as("img").attrs({ srcset: "img-2x.png 2x", sizes: "(max-width: 600px) 100vw" })(),
+    ).toEqual('<img srcset="img-2x.png 2x" sizes="(max-width: 600px) 100vw"></img>');
+  });
+
+  // ── Video / Audio ─────────────────────────────────────────────────────────
+
+  it("<video> renders src, controls, autoplay, loop, muted as boolean attrs", () => {
+    expect(
+      pose.as("video").attrs({ src: "/clip.mp4", controls: "", autoplay: "", muted: "" })(),
+    ).toEqual('<video src="/clip.mp4" controls autoplay muted></video>');
+  });
+
+  it("<video> renders width, height, poster, preload", () => {
+    expect(
+      pose
+        .as("video")
+        .attrs({ width: "640", height: "360", poster: "/thumb.jpg", preload: "metadata" })(),
+    ).toEqual('<video width="640" height="360" poster="/thumb.jpg" preload="metadata"></video>');
+  });
+
+  it("<audio> renders src, controls, loop, muted", () => {
+    expect(
+      pose.as("audio").attrs({ src: "/track.mp3", controls: "", loop: "", muted: "" })(),
+    ).toEqual('<audio src="/track.mp3" controls loop muted></audio>');
+  });
+
+  // ── Iframe ────────────────────────────────────────────────────────────────
+
+  it("<iframe> renders src, width, height, title", () => {
+    expect(
+      pose
+        .as("iframe")
+        .attrs({ src: "https://example.com", width: "600", height: "400", title: "Demo" })(),
+    ).toEqual('<iframe src="https://example.com" width="600" height="400" title="Demo"></iframe>');
+  });
+
+  it("<iframe> renders allowfullscreen as boolean attribute", () => {
+    expect(pose.as("iframe").attr("allowfullscreen", "")()).toEqual(
+      "<iframe allowfullscreen></iframe>",
+    );
+  });
+
+  it("<iframe> renders sandbox attribute", () => {
+    expect(pose.as("iframe").attr("sandbox", "allow-scripts allow-same-origin")()).toEqual(
+      '<iframe sandbox="allow-scripts allow-same-origin"></iframe>',
+    );
+  });
+
+  // ── Script / Link / Meta ──────────────────────────────────────────────────
+
+  it("<script> renders src, type, async, defer as boolean attrs", () => {
+    expect(
+      pose.as("script").attrs({ src: "/app.js", type: "module", async: "", defer: "" })(),
+    ).toEqual('<script src="/app.js" type="module" async defer></script>');
+  });
+
+  it("<link> renders rel, href, type for stylesheet", () => {
+    expect(
+      pose.as("link").attrs({ rel: "stylesheet", href: "/app.css", type: "text/css" })(),
+    ).toEqual('<link rel="stylesheet" href="/app.css" type="text/css"></link>');
+  });
+
+  it("<meta> renders name and content", () => {
+    expect(
+      pose.as("meta").attrs({ name: "description", content: "My page description" })(),
+    ).toEqual('<meta name="description" content="My page description"></meta>');
+  });
+
+  it("<meta> renders charset", () => {
+    expect(pose.as("meta").attr("charset", "UTF-8")()).toEqual('<meta charset="UTF-8"></meta>');
+  });
+
+  // ── Table elements ────────────────────────────────────────────────────────
+
+  it("<td> renders colspan, rowspan, headers", () => {
+    expect(pose.as("td").attrs({ colspan: "2", rowspan: "3", headers: "col1" })()).toEqual(
+      '<td colspan="2" rowspan="3" headers="col1"></td>',
+    );
+  });
+
+  it("<th> renders scope attribute", () => {
+    expect(pose.as("th").attr("scope", "col").child("Name")()).toEqual('<th scope="col">Name</th>');
+  });
+
+  it("<col> renders span attribute", () => {
+    expect(pose.as("col").attr("span", "2")()).toEqual('<col span="2"></col>');
+  });
+
+  // ── Dialog / Details ─────────────────────────────────────────────────────
+
+  it("<dialog> renders open as boolean attribute", () => {
+    expect(pose.as("dialog").attr("open", "")()).toEqual("<dialog open></dialog>");
+  });
+
+  it("<details> renders open as boolean attribute", () => {
+    expect(pose.as("details").attr("open", "")()).toEqual("<details open></details>");
+  });
+
+  // ── Progress / Meter ─────────────────────────────────────────────────────
+
+  it("<progress> renders value and max", () => {
+    expect(pose.as("progress").attrs({ value: "70", max: "100" })()).toEqual(
+      '<progress value="70" max="100"></progress>',
+    );
+  });
+
+  it("<meter> renders min, max, value, low, high, optimum", () => {
+    expect(
+      pose
+        .as("meter")
+        .attrs({ min: "0", max: "100", value: "60", low: "25", high: "75", optimum: "80" })(),
+    ).toEqual('<meter min="0" max="100" value="60" low="25" high="75" optimum="80"></meter>');
+  });
+
+  // ── Global attrs on all elements ──────────────────────────────────────────
+
+  it("id, class, style, tabindex are valid on every element", () => {
+    const tags = ["div", "span", "p", "section", "article", "button", "input"] as const;
+    for (const tag of tags) {
+      expect(
+        pose.as(tag).attrs({ id: "x", class: "foo", style: "color:red", tabindex: "0" })(),
+      ).toContain('id="x"');
+    }
+  });
+
+  it("hidden is a valid global boolean attribute", () => {
+    expect(pose.as("div").attr("hidden", "")()).toEqual("<div hidden></div>");
+  });
+
+  it("lang attribute is valid globally", () => {
+    expect(pose.as("html").attr("lang", "en")()).toEqual('<html lang="en"></html>');
+  });
+
+  it("dir attribute is valid globally", () => {
+    expect(pose.as("p").attr("dir", "rtl").child("مرحبا")()).toEqual('<p dir="rtl">مرحبا</p>');
+  });
+
+  it("contenteditable is valid globally", () => {
+    expect(pose.as("div").attr("contenteditable", "true")()).toEqual(
+      '<div contenteditable="true"></div>',
+    );
+  });
+
+  it("draggable is valid globally", () => {
+    expect(pose.as("div").attr("draggable", "true")()).toEqual('<div draggable="true"></div>');
+  });
+
+  // ── data-* ────────────────────────────────────────────────────────────────
+
+  it("data-* attributes are always accepted on any element", () => {
+    expect(
+      pose
+        .as("div")
+        .attrs({ "data-id": "42", "data-user-role": "admin", "data-testid": "container" })(),
+    ).toEqual('<div data-id="42" data-user-role="admin" data-testid="container"></div>');
+  });
+
+  it("data-* works on specialised elements too", () => {
+    expect(pose.as("button").attr("data-action", "close")()).toEqual(
+      '<button data-action="close"></button>',
+    );
+  });
+
+  // ── aria-* ────────────────────────────────────────────────────────────────
+
+  it("aria-label is valid on any element", () => {
+    expect(pose.as("button").attr("aria-label", "Close dialog")()).toEqual(
+      '<button aria-label="Close dialog"></button>',
+    );
+  });
+
+  it("aria-hidden is valid on any element", () => {
+    expect(pose.as("span").attr("aria-hidden", "true")()).toEqual(
+      '<span aria-hidden="true"></span>',
+    );
+  });
+
+  it("aria-expanded and aria-controls render correctly", () => {
+    expect(
+      pose.as("button").attrs({ "aria-expanded": "false", "aria-controls": "menu" })(),
+    ).toEqual('<button aria-expanded="false" aria-controls="menu"></button>');
+  });
+
+  it("role attribute is valid globally", () => {
+    expect(pose.as("div").attr("role", "navigation")()).toEqual('<div role="navigation"></div>');
+  });
+
+  // ── IDL normalisation — content attribute names, not JS property names ────
+
+  it("uses 'class' not 'className'", () => {
+    // class is in GlobalAttrs; className is the IDL name we do NOT expose
+    expect(pose.as("div").attr("class", "foo bar")()).toEqual('<div class="foo bar"></div>');
+  });
+
+  it("uses 'for' not 'htmlFor' on <label>", () => {
+    expect(pose.as("label").attr("for", "name")()).toEqual('<label for="name"></label>');
+  });
+
+  it("uses 'tabindex' not 'tabIndex'", () => {
+    expect(pose.as("div").attr("tabindex", "0")()).toEqual('<div tabindex="0"></div>');
+  });
+
+  it("uses 'readonly' not 'readOnly' on <input>", () => {
+    expect(pose.as("input").attr("readonly", "")()).toEqual("<input readonly></input>");
+  });
+
+  it("uses 'maxlength' not 'maxLength' on <input>", () => {
+    expect(pose.as("input").attr("maxlength", "255")()).toEqual('<input maxlength="255"></input>');
+  });
+
+  it("uses 'colspan' not 'colSpan' on <td>", () => {
+    expect(pose.as("td").attr("colspan", "3")()).toEqual('<td colspan="3"></td>');
+  });
+
+  it("uses 'rowspan' not 'rowSpan' on <td>", () => {
+    expect(pose.as("td").attr("rowspan", "2")()).toEqual('<td rowspan="2"></td>');
+  });
+
+  // ── TTag preserved through chain ──────────────────────────────────────────
+
+  it("TTag is preserved through .cls()", () => {
+    // type-level: .attr() after .cls() should still infer button attrs
+    const el = pose.as("button").cls("my-class").attr("type", "button");
+    expect(el()).toEqual('<button class="my-class" type="button"></button>');
+  });
+
+  it("TTag is preserved through .child()", () => {
+    const el = pose.as("a").child("Link").attr("href", "/");
+    expect(el()).toEqual('<a href="/">Link</a>');
+  });
+
+  it("TTag is preserved through .input()", () => {
+    const el = pose
+      .as("input")
+      .input(z.object({ val: z.string().default("ada@example.com") }))
+      .attr("type", "email")
+      .attr("value", ({ val }) => val)
+      .attr("required", "");
+
+    expect(el()).toEqual('<input type="email" value="ada@example.com" required></input>');
+  });
+
+  it("TTag is preserved through .when()", () => {
+    const el = pose
+      .as("button")
+      .input(z.object({ disabled: z.boolean().default(false) }))
+      .when(
+        ({ disabled }) => disabled,
+        (b) => b.opacity(50),
+      )
+      .attr("type", "submit");
+
+    expect(el({ disabled: false })).toEqual('<button type="submit"></button>');
+    expect(el({ disabled: true })).toEqual('<button class="opacity-50" type="submit"></button>');
+  });
+
+  // ── Dynamic attr values ───────────────────────────────────────────────────
+
+  it("attr value inferred from TTag works with dynamic functions", () => {
+    const el = pose
+      .as("input")
+      .input(z.object({ kind: z.enum(["email", "password", "text"]).default("text") }))
+      .attr("type", ({ kind }) => kind);
+
+    expect(el({ kind: "email" })).toEqual('<input type="email"></input>');
+    expect(el({ kind: "password" })).toEqual('<input type="password"></input>');
+  });
+
+  it("target attr on <a> works dynamically", () => {
+    const el = pose
+      .as("a")
+      .input(z.object({ external: z.boolean().default(false), url: z.string() }))
+      .attr("href", ({ url }) => url)
+      .attr("target", ({ external }) => (external ? "_blank" : null))
+      .attr("rel", ({ external }) => (external ? "noopener noreferrer" : null));
+
+    expect(el({ external: false, url: "/page" })).toEqual('<a href="/page"></a>');
+    expect(el({ external: true, url: "https://ext.com" })).toEqual(
+      '<a href="https://ext.com" target="_blank" rel="noopener noreferrer"></a>',
+    );
+  });
+
+  // ── Type-level checks (compile-time only, no runtime assertions needed) ───
+
+  it("type-level: .as() returns PoseElement with correct TTag", () => {
+    expectTypeOf(pose.as("button")).toMatchTypeOf<PoseElement<any, any, "button">>();
+    expectTypeOf(pose.as("input")).toMatchTypeOf<PoseElement<any, any, "input">>();
+    expectTypeOf(pose.as("a")).toMatchTypeOf<PoseElement<any, any, "a">>();
+  });
+
+  it("type-level: TTag preserved through chain produces correct element type", () => {
+    const el = pose.as("input").attr("type", "email").attr("required", "");
+    expectTypeOf(el).toMatchTypeOf<PoseElement<any, any, "input">>();
   });
 });
