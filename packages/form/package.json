@@ -1,0 +1,37 @@
+{
+  "name": "@poseui/form",
+  "version": "0.0.1",
+  "description": "Typed forms.",
+  "license": "MIT",
+  "author": "Ryuz <ryuzer@proton.me>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/guarana-studio/poseui.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "module": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && tsdown",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@poseui/on": "workspace:*"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^20.8.4",
+    "@types/bun": "latest",
+    "zod": "^4.3.6"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}

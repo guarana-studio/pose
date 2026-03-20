@@ -11,6 +11,7 @@ Type-safe HTML templating engine with a fluent Tailwind-compatible builder API. 
 | [`poseui`](./packages/poseui)       | Core templating engine                   |
 | [`@poseui/on`](./packages/on)       | Typed DOM event registration             |
 | [`@poseui/match`](./packages/match) | Typed pattern matching for plain objects |
+| [`@poseui/form`](./packages/form)   | Typed form binding via Standard Schema   |
 
 ---
 
@@ -84,7 +85,6 @@ events
   .on("mouseenter", (e) => e.currentTarget.classList.add("hovered"))
   .on("mouseleave", (e) => e.currentTarget.classList.remove("hovered"));
 
-// Attach to a DOM subtree once your HTML is ready
 const unmount = events.mount(document.querySelector("#app"));
 
 // Full cleanup when navigating away or tearing down
@@ -154,6 +154,55 @@ bun add @poseui/match
 ```
 
 See [`@poseui/match`](./packages/match) for the full API reference.
+
+---
+
+## `@poseui/form`
+
+Typed form binding via Standard Schema. Attach a Zod, Valibot, or ArkType schema to any `<form>` element and get fully typed values on submission, per-field error state, and optional live validation — without owning your markup or dictating how errors are rendered.
+
+```ts
+import { createForm } from "@poseui/form";
+import { z } from "zod";
+
+const form = createForm({
+  target: "#signup",
+  schema: z.object({
+    name: z.string().min(1, "Name is required"),
+    email: z.email("Invalid email"),
+    age: z.coerce.number().min(18, "Must be 18 or older"),
+  }),
+  onSubmit(values) {
+    // values.name  → string
+    // values.email → string
+    // values.age   → number  (coerced from the string FormData gives you)
+    console.log(values);
+  },
+  onError(issues) {
+    console.log(form.errors());
+    // → { name: ["Name is required"], age: ["Must be 18 or older"] }
+  },
+  validateOn: "change", // "submit" | "change" | "input"
+});
+
+const unmount = form.mount();
+
+// Read current values at any time without submitting:
+const result = form.values();
+if (result.ok) console.log(result.data); // fully typed
+
+// Programmatic submission — useful for buttons outside the <form>:
+document.querySelector("#external-btn")?.addEventListener("click", () => form.submit());
+
+// Tear down when done:
+unmount();
+```
+
+```bash
+bun add @poseui/form
+```
+
+See [`@poseui/form`](./packages/form) for the full API reference.
 
 ---
 

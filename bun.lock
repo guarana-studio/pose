@@ -10,7 +10,7 @@
       },
     },
     "apps/ministory": {
-      "name": "@poseui/ministory",
+      "name": "ministory",
       "dependencies": {
         "dedent": "^1.7.2",
         "poseui": "workspace:*",
@@ -18,6 +18,20 @@
       },
       "devDependencies": {
         "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
+    "packages/form": {
+      "name": "@poseui/form",
+      "dependencies": {
+        "@poseui/on": "workspace:*",
+      },
+      "devDependencies": {
+        "@happy-dom/global-registrator": "^20.8.4",
+        "@types/bun": "latest",
+        "zod": "^4.3.6",
       },
       "peerDependencies": {
         "typescript": "^5",
@@ -48,7 +62,7 @@
     },
     "packages/poseui": {
       "name": "poseui",
-      "version": "0.0.5",
+      "version": "0.0.6",
       "dependencies": {
         "@poseui/match": "workspace:*",
       },
@@ -239,9 +253,9 @@
 
     "@oxlint/binding-win32-x64-msvc": ["@oxlint/binding-win32-x64-msvc@1.56.0", "", { "os": "win32", "cpu": "x64" }, "sha512-ZHa0clocjLmIDr+1LwoWtxRcoYniAvERotvwKUYKhH41NVfl0Y4LNbyQkwMZzwDvKklKGvGZ5+DAG58/Ik47tQ=="],
 
-    "@poseui/match": ["@poseui/match@workspace:packages/match"],
+    "@poseui/form": ["@poseui/form@workspace:packages/form"],
 
-    "@poseui/ministory": ["@poseui/ministory@workspace:apps/ministory"],
+    "@poseui/match": ["@poseui/match@workspace:packages/match"],
 
     "@poseui/on": ["@poseui/on@workspace:packages/on"],
 
@@ -562,6 +576,8 @@
     "micromark-util-types": ["micromark-util-types@2.0.2", "", {}, "sha512-Yw0ECSpJoViF1qTU4DC6NwtC4aWGt1EkzaQB8KPPyCRR8z9TWeV0HbEFGTO+ZY1wB22zmxnJqhPyTpOVCpeHTA=="],
 
     "minisearch": ["minisearch@7.2.0", "", {}, "sha512-dqT2XBYUOZOiC5t2HRnwADjhNS2cecp9u+TJRiJ1Qp/f5qjkeT5APcGPjHw+bz89Ms8Jp+cG4AlE+QZ/QnDglg=="],
+
+    "ministory": ["ministory@workspace:apps/ministory"],
 
     "nanoid": ["nanoid@5.1.7", "", { "bin": { "nanoid": "bin/nanoid.js" } }, "sha512-ua3NDgISf6jdwezAheMOk4mbE1LXjm1DfMUDMuJf4AqxLFK3ccGpgWizwa5YV7Yz9EpXwEaWoRXSb/BnV0t5dQ=="],
 
