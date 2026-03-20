@@ -1,6 +1,6 @@
 # Pose
 
-> ⚠️ Prototype — API is unstable
+> ⚠️ Prototype — the API is unstable. The libraries haven't been published to NPM yet, use [the nightly builds](https://pkg.pr.new/~/guarana-studio/poseui).
 
 Type-safe HTML for vanilla TypeScript. No framework, no virtual DOM, no compiler — just typed components, reactive state, and clean DOM bindings.
 
