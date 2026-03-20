@@ -1,5 +1,5 @@
 // =============================================================================
-// poseui/tailwind4 — Tailwind v4 / UnoCSS presetWind4 fluent methods
+// poseui/presets — Tailwind v4 / UnoCSS presetWind4 fluent methods
 //
 // Import this file to get both:
 //   - runtime: all utility methods attached to every PoseElement
@@ -7,7 +7,7 @@
 //
 // Usage:
 //   import { createPose } from "poseui";
-//   import { tailwind4 } from "poseui/tailwind4";
+//   import { tailwind4 } from "poseui/presets";
 //
 //   const pose = createPose({ presets: [tailwind4] });
 //   pose.as("div").flex().p(4).bg("indigo-600");

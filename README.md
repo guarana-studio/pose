@@ -191,7 +191,7 @@ All five packages compose without coupling. Here's what a real contact form look
 
 ```ts
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/tailwind4";
+import { tailwind4 } from "poseui/presets";
 import { createEventMap } from "@poseui/on";
 import { createForm } from "@poseui/form";
 import { createStore, effectScope } from "@poseui/store";

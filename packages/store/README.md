@@ -5,7 +5,7 @@ Reactive state management for vanilla TypeScript, backed by [alien-signals](http
 ```ts
 import { createStore } from "@poseui/store";
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/tailwind4";
+import { tailwind4 } from "poseui/presets";
 
 const pose = createPose({ presets: [tailwind4] });
 
@@ -230,7 +230,7 @@ import { createStore, effectScope } from "@poseui/store";
 import { createEventMap } from "@poseui/on";
 import { createForm } from "@poseui/form";
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/tailwind4";
+import { tailwind4 } from "poseui/presets";
 import { z } from "zod";
 
 const pose = createPose({ presets: [tailwind4] });

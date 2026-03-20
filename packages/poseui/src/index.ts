@@ -580,7 +580,7 @@ export interface CreatePoseOptions {
  *
  * @example
  * import { createPose } from "poseui";
- * import { tailwind4 } from "poseui/tailwind4";
+ * import { tailwind4 } from "poseui/presets";
  *
  * const pose = createPose({ presets: [tailwind4] });
  * const button = pose.as("button").flex().px(4).bg("indigo-600");
