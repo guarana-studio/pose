@@ -1,12 +1,16 @@
 import type { PoseElement } from "poseui";
 
-type Story<TArgs extends Record<string, unknown>> = {
+export type Story<TArgs extends Record<string, unknown>> = {
   args: TArgs;
   component: PoseElement<TArgs>;
 };
 
-export function defineStory<TArgs extends Record<string, unknown>>(
-  story: Story<TArgs>,
-): Story<TArgs> {
-  return story;
+// Loose story type for the registry - component accepts any args
+export type AnyStory = {
+  args: Record<string, unknown>;
+  component: PoseElement<Record<string, unknown>>;
+};
+
+export function defineStory<TArgs extends Record<string, unknown>>(story: Story<TArgs>): AnyStory {
+  return story as unknown as AnyStory;
 }

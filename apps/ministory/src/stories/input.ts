@@ -3,7 +3,7 @@ import { pose } from "../ui";
 
 export const inputStory = defineStory({
   args: {
-    type: "text",
+    type: "text" as const,
     name: "email",
     placeholder: "Enter your email",
     value: "",
