@@ -126,7 +126,7 @@ describe("HandlerContext.input", () => {
   it("passes raw props as input when no schema is bound", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let captured: Record<string, unknown> | null = null;
+    let captured: any = "NOT_SET";
 
     pose
       .as("div")
@@ -141,7 +141,7 @@ describe("HandlerContext.input", () => {
   it("passes schema-validated props as input", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let captured: { name: string } | null = null;
+    let captured: any = "NOT_SET";
 
     pose
       .as("div")
@@ -157,7 +157,7 @@ describe("HandlerContext.input", () => {
   it("applies schema defaults before passing input", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let captured: { count: number } | null = null;
+    let captured: any = "NOT_SET";
 
     pose
       .as("div")
@@ -173,7 +173,7 @@ describe("HandlerContext.input", () => {
   it("applies schema transforms before passing input", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let captured: { name: string } | null = null;
+    let captured: any = "NOT_SET";
 
     pose
       .as("div")
@@ -230,7 +230,7 @@ describe("HandlerContext.el", () => {
   it("passes the root element reference into the handler", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let captured: Element | null = null;
+    let captured: any = "NOT_SET";
 
     pose
       .as("div")
@@ -267,7 +267,7 @@ describe("HandlerContext.events", () => {
   it("passes the events instance into the handler", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let capturedEvents: EventMap | null = null;
+    let capturedEvents: any = "NOT_SET";
 
     pose
       .as("div")
@@ -307,7 +307,7 @@ describe("HandlerContext.render", () => {
   it("re-renders el.innerHTML when called with new props", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     const component = pose
       .as("div")
@@ -327,7 +327,7 @@ describe("HandlerContext.render", () => {
   it("applies schema defaults on re-render", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     pose
       .as("div")
@@ -345,7 +345,7 @@ describe("HandlerContext.render", () => {
   it("applies schema transforms on re-render", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     pose
       .as("div")
@@ -363,7 +363,7 @@ describe("HandlerContext.render", () => {
   it("does NOT call events.mount() again on re-render", () => {
     const { events, mountCalls } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     pose
       .as("div")
@@ -383,7 +383,7 @@ describe("HandlerContext.render", () => {
   it("supports multiple sequential re-renders", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     pose
       .as("span")
@@ -401,7 +401,7 @@ describe("HandlerContext.render", () => {
   it("throws PoseValidationError on invalid props in re-render", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((props?: any) => void) | null = null;
+    let savedRender!: (props?: any) => void;
 
     pose
       .as("div")
@@ -520,7 +520,7 @@ describe("rendered HTML correctness through .handler()", () => {
   it("re-render reflects .when() branch change", () => {
     const { events } = makeEvents();
     const el = makeEl();
-    let savedRender: ((p?: any) => void) | null = null;
+    let savedRender!: (p?: any) => void;
 
     pose
       .as("button")
