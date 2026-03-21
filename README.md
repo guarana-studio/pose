@@ -54,6 +54,64 @@ button({ variant: "primary" });
 // → <button class="px-4 py-2 rounded font-semibold transition bg-indigo-600 text-white">Submit</button>
 ```
 
+For larger layouts, use the `html` tagged template literal to compose multiple elements into a single typed template:
+
+```ts
+import { html } from "poseui";
+
+const card = pose.as("div").cls("rounded-xl shadow-md p-6 bg-white");
+const loginForm = pose.as("form").attr("method", "post");
+const emailLabel = pose.as("label").cls("text-sm font-medium").attr("for", "email");
+const emailInput = pose.as("input").cls("form-input w-full").attrs({ type: "email", id: "email" });
+const cardFooter = pose.as("footer").cls("mt-4 flex justify-end gap-2");
+const loginBtn = pose.as("button").cls("btn-primary").attr("type", "submit");
+const googleBtn = pose.as("button").cls("btn-outline").attr("type", "button");
+
+const loginCard = html`
+  <div ${card}>
+    <header>
+      <h2 class="text-xl font-semibold">Login to your account</h2>
+    </header>
+    <section class="mt-4">
+      <form ${loginForm}>
+        <div class="grid gap-2">
+          <label ${emailLabel}>Email</label>
+          <input ${emailInput} />
+        </div>
+      </form>
+    </section>
+    <footer ${cardFooter}>
+      <button ${loginBtn}>Login</button>
+      <button ${googleBtn}>Login with Google</button>
+    </footer>
+  </div>
+`;
+
+loginCard();
+```
+
+When a `PoseElement` appears inside an opening tag (`<div ${card}>`), its classes and attributes are spread onto the host tag. Elsewhere it renders in full. Pass a type parameter to thread typed props through all slots:
+
+```ts
+type Props = { username: string; error: string | null };
+
+const errorMsg = pose
+  .as("p")
+  .cls("text-sm text-red-500")
+  .input(z.object({ error: z.string().nullable() }))
+  .child(({ error }) => error);
+
+const form = html<Props>`
+  <form method="post">
+    <input type="text" name="username" value="${({ username }) => username}" />
+    ${({ error }) => (error ? errorMsg : null)}
+    <button type="submit">Log in</button>
+  </form>
+`;
+
+form({ username: "ada", error: "Invalid password" });
+```
+
 ```bash
 bun add poseui
 bun add zod  # or valibot, arktype — any Standard Schema lib
