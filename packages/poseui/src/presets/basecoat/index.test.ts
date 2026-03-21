@@ -6,8 +6,6 @@
 import { describe, it, expect } from "bun:test";
 
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/presets";
-
 import {
   basecoat,
   BtnSchema,
@@ -21,7 +19,8 @@ import {
   TableSchema,
   TabsSchema,
   TooltipSchema,
-} from "./basecoat";
+} from "poseui/presets/basecoat";
+import { tailwind4 } from "poseui/presets/tailwind4";
 
 // ---------------------------------------------------------------------------
 // Test pose instance

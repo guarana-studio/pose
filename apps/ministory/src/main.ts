@@ -1,13 +1,40 @@
-import pose, { type PoseElement } from "poseui";
+import "./app.css";
+import "virtual:uno.css";
+import "basecoat-css/all";
+import { html } from "poseui";
 import { z } from "zod";
 
-import { container } from "./lib/components/container";
-import { buttonStory } from "./stories/button";
+import { createContainer } from "./lib/components/container";
+import { pose, div, createSidebar } from "./ui";
+
+const container = createContainer(pose);
 
 // ─── Story registry ──────────────────────────────────────────────────────────
 
+import { alertStory } from "./stories/alert";
+import { badgeStory } from "./stories/badge";
+import { buttonStory } from "./stories/button";
+import { cardStory } from "./stories/card";
+import { inputStory } from "./stories/input";
+import { kbdStory } from "./stories/kbd";
+import { labelStory } from "./stories/label";
+import { tableStory } from "./stories/table";
+import { tabsStory } from "./stories/tabs";
+import { textareaStory } from "./stories/textarea";
+import { tooltipStory } from "./stories/tooltip";
+
 const STORIES = {
   button: buttonStory,
+  badge: badgeStory,
+  alert: alertStory,
+  card: cardStory,
+  input: inputStory,
+  textarea: textareaStory,
+  label: labelStory,
+  kbd: kbdStory,
+  table: tableStory,
+  tabs: tabsStory,
+  tooltip: tooltipStory,
 };
 
 type StoryName = keyof typeof STORIES;
@@ -22,50 +49,48 @@ function parseRoute(hash: string): Route {
   return Route.parse(hash || "start");
 }
 
-// ─── UI components ───────────────────────────────────────────────────────────
+// ─── Layout components ───────────────────────────────────────────────────────
 
-const logo = pose.as("a").attr("href", "#").child("Pose");
+const sidebar = createSidebar(STORY_NAMES);
 
-const navLink = pose
-  .as("a")
-  .input(z.object({ href: z.string(), text: z.string() }))
-  .attr("href", (props) => props.href)
-  .text("red-500")
-  .child((props) => props.text);
-
-const navLinks = STORY_NAMES.map((name) => navLink({ href: `#${name}`, text: name }));
-
-const sidebar = pose
-  .as("aside")
+const propertiesPanel = div
   .flex_1()
-  .flex()
-  .flex_col()
-  .border_r()
+  .border_l()
   .p(2)
-  .child([logo, ...navLinks]);
-
-// ─── Layout helpers ──────────────────────────────────────────────────────────
-
-function withLayout(content: PoseElement<any> | string) {
-  return pose.as("div").flex().h_screen().child([sidebar, content]);
-}
-
-function withContainer(content: PoseElement<any> | string) {
-  return container.child(content);
-}
+  .child([pose.as("h2").text_lg().font_semibold().child("Properties")]);
 
 // ─── Views ───────────────────────────────────────────────────────────────────
 
 function renderStartView(): string {
-  const sourceList = STORY_NAMES.map((name) => pose.as("pre").child(name));
-  const content = withContainer(pose.as("div").child(sourceList));
-  return withLayout(content)();
+  const sourceList = STORY_NAMES.map((name) => `<pre>${name}</pre>`).join("");
+
+  return html`
+    <div ${div.flex().h_screen()}>
+      ${sidebar}
+      <div ${container}>
+        ${sourceList}
+      </div>
+    </div>
+  `();
 }
 
 function renderStoryView(name: StoryName): string {
   const story = STORIES[name];
   const rendered = story.component(story.args);
-  return withLayout(withContainer(rendered))();
+
+  return html`
+    <div ${div.flex().h_screen()}>
+      ${sidebar}
+      <div ${container}>
+        <div ${div.flex_1().flex().w_full()}>
+          <div ${div.cls("flex-[2]")}>
+            ${rendered}
+          </div>
+          ${propertiesPanel}
+        </div>
+      </div>
+    </div>
+  `();
 }
 
 // ─── App shell ───────────────────────────────────────────────────────────────

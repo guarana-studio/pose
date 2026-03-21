@@ -32,7 +32,7 @@ function arbitrary(value: string): string {
 // Declaration merging — augments PoseElement with all Tailwind utility methods
 // ---------------------------------------------------------------------------
 
-declare module "../index" {
+declare module "poseui" {
   interface PoseElement<
     TProps extends Record<string, unknown>,
     TSchema,

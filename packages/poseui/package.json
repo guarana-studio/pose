@@ -18,9 +18,17 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./presets": {
-      "types": "./dist/presets/index.d.ts",
-      "import": "./dist/presets/index.js"
+    "./presets/tailwind4": {
+      "types": "./dist/presets/tailwind4/index.d.ts",
+      "import": "./dist/presets/tailwind4/index.js"
+    },
+    "./presets/basecoat": {
+      "types": "./dist/presets/basecoat/index.d.ts",
+      "import": "./dist/presets/basecoat/index.js"
+    },
+    "./unocss": {
+      "types": "./dist/unocss/index.d.ts",
+      "import": "./dist/unocss/index.js"
     }
   },
   "scripts": {
@@ -35,6 +43,7 @@
     "@poseui/match": "workspace:*"
   },
   "devDependencies": {
+    "@unocss/core": "^66.6.7",
     "docsome": "^0.0.1",
     "oxfmt": "^0.41.0",
     "zod": "^4.3.6"

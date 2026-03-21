@@ -1,3 +1,4 @@
-import pose from "poseui";
+import type { Pose } from "poseui";
 
-export const container = pose.as("div").cls("flex-[4]").p(2);
+export const createContainer = (pose: Pose) =>
+  pose.as("div").flex().flex_col().cls("flex-[4]").p(2);

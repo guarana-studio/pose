@@ -1,8 +1,8 @@
 # Pose
 
-Type-safe HTML templating engine with a fluent Tailwind-compatible builder API. Inspired by [gpui](https://www.gpui.rs/).
+Type-safe HTML templating engine with a fluent utility-class builder API. Inspired by [gpui](https://www.gpui.rs/).
 
-Zero dependencies. Fully synchronous. Emits HTML with utility class names.
+Zero runtime dependencies. Fully synchronous. Emits HTML with utility class names.
 
 ```ts
 import pose from "poseui";
@@ -47,19 +47,56 @@ bun add zod  # or valibot, arktype, any Standard Schema lib
 
 ## CSS
 
-Pose emits standard Tailwind-compatible class names and nothing else. Plug in whatever you already use:
+Pose emits standard utility class names and works with UnoCSS via a first-party extractor. Install the dependencies:
 
 ```bash
-# Tailwind v4
-npx @tailwindcss/cli -i input.css -o output.css
-
-# UnoCSS
-npx unocss "**/*.ts" -o output.css
+bun add -d unocss
 ```
 
-Because the HTML is plain strings, both tools pick up classes the same way they would from any other source file.
+Then set up the three config files:
 
-For tighter control over what gets compiled, use `createPose()` and `getAllClasses()` to feed a precise class list to your CSS tool — see [CSS pipeline integration](#css-pipeline-integration) below.
+```ts
+// uno.config.ts
+import { extractorPoseui } from "poseui/unocss";
+import { defineConfig, presetWind4, transformerDirectives, transformerVariantGroup } from "unocss";
+
+export default defineConfig({
+  presets: [presetWind4()],
+  theme: {}, // Add theme vars
+  extractors: [extractorPoseui()],
+  transformers: [transformerDirectives(), transformerVariantGroup()],
+  outputToCssLayers: {
+    cssLayerName: (layer) => {
+      if (layer === "preflights") return "base";
+      if (layer === "default") return "utilities";
+      if (layer === "shortcuts") return "utilities.shortcuts";
+      return layer;
+    },
+  },
+  content: {
+    pipeline: {
+      include: ["src/**/*.ts", "node_modules/poseui/dist/presets/tailwind4/index.js"],
+    },
+  },
+});
+```
+
+```ts
+// vite.config.ts
+import UnoCSS from "unocss/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [UnoCSS()],
+});
+```
+
+```ts
+// main.ts
+import "virtual:uno.css";
+```
+
+`extractorPoseui()` teaches UnoCSS how to extract utility classes from `PoseElement` instances and `html\`\`` templates directly from your source files — no separate safelist step needed.
 
 ## Core concepts
 
@@ -67,7 +104,7 @@ For tighter control over what gets compiled, use `createPose()` and `getAllClass
 
 **`.input(schema)`** — bind a [Standard Schema](https://standardschema.dev) object schema. Infers `TProps` from the output type so `.default()` transforms work. Validates on every call and throws `PoseValidationError` on failure.
 
-**Style methods** — cover the full Tailwind utility surface: layout, spacing, typography, colour, borders, shadows, transforms, filters, animation, and more. Every method that takes a value also accepts `(props: TProps) => value` for dynamic styles. See the source for the complete list.
+**Style methods** — cover the full utility class surface: layout, spacing, typography, colour, borders, shadows, transforms, filters, animation, and more. Every method that takes a value also accepts `(props: TProps) => value` for dynamic styles. See the source for the complete list.
 
 **`.when(pred, apply)`** — apply styles when a predicate returns true:
 
@@ -158,61 +195,180 @@ card();
 // → <div class="p-4 rounded shadow-md"><img class="rounded-full w-8 h-8"></img><p class="text-sm">Hello</p></div>
 ```
 
-## CSS pipeline integration
+## html\`\` tagged templates
 
-`createPose()` creates a dedicated instance that tracks every class registered across all elements built from it. Call `getAllClasses()` on the instance to get a deduplicated, space-separated string of every statically-known class — suitable for feeding directly to Tailwind or UnoCSS as a source file.
+For complex layouts that mix multiple elements, structural HTML, and raw markup, the `html` tagged template literal composes `PoseElement` instances into a larger template while keeping props threaded through the whole tree.
 
 ```ts
-// components.ts
+import { html } from "poseui/template";
+```
+
+### Slot types
+
+An interpolation slot accepts three things:
+
+- **`PoseElement`** — rendered with the template's current props (see [spread position](#spread-position) below for the special opening-tag behaviour)
+- **`(props) => string | null | undefined`** — called with the current props at render time
+- **`string | number | null | undefined`** — inserted literally; `null` and `undefined` emit nothing
+
+### Basic usage
+
+```ts
+const emailLabel = pose.as("label").attr("for", "email");
+const emailInput = pose.as("input").cls("form-input").attr("type", "email").attr("id", "email");
+
+const field = html`
+  <div class="grid gap-2">
+    <label ${emailLabel}>Email</label>
+    <input ${emailInput} />
+  </div>
+`;
+
+field();
+// → <div class="grid gap-2"><label for="email">Email</label><input class="form-input" type="email" id="email" /></div>
+```
+
+Call the template like a function — `field()` — and it returns the rendered HTML string.
+
+### Props
+
+Pass a type parameter to `html` to get typed props flowing through all function slots and child elements:
+
+```ts
+type LoginProps = {
+  username: string;
+  error: string | null;
+};
+
+const errorMsg = pose
+  .as("p")
+  .input(z.object({ error: z.string().nullable() }))
+  .cls("text-red-500 text-sm")
+  .child(({ error }) => error);
+
+const loginForm = html<LoginProps>`
+  <form method="post">
+    <input type="text" name="username" value="${({ username }) => username}" />
+    ${({ error }) => (error ? errorMsg : null)}
+    <button type="submit">Log in</button>
+  </form>
+`;
+
+loginForm({ username: "ada", error: "Invalid password" });
+// → <form method="post"><input ... /><p class="text-red-500 text-sm">Invalid password</p><button ...>Log in</button></form>
+```
+
+Props flow into both function slots (`({ error }) => ...`) and `PoseElement` children — the same props object is passed to every slot in the tree on each render.
+
+### Spread position
+
+When a `PoseElement` is interpolated directly inside an opening tag — between the tag name and the closing `>` — its `class` and attributes are merged into that tag rather than rendered as a child element:
+
+```ts
+const card = pose.as("div").cls("rounded-xl shadow p-6");
+const footer = pose.as("footer").cls("mt-4 flex gap-2");
+const saveBtn = pose.as("button").attr("type", "submit").cls("btn-primary");
+
+const cardTemplate = html`
+  <div ${card}>
+    <footer ${footer}>
+      <button ${saveBtn}>Save</button>
+    </footer>
+  </div>
+`;
+
+cardTemplate();
+// → <div class="rounded-xl shadow p-6"><footer class="mt-4 flex gap-2"><button type="submit" class="btn-primary">Save</button></footer></div>
+```
+
+This lets you define a `PoseElement` as a style and attribute bundle and spread it onto any host tag in a template, without the element's own tag being emitted. A `PoseElement` in any other position (between tags, inside text content) is fully rendered as usual.
+
+Dynamic spread attributes work the same way — the props are passed through at render time:
+
+```ts
+const link = pose
+  .as("a")
+  .input(z.object({ external: z.boolean().default(false) }))
+  .attr("target", ({ external }) => (external ? "_blank" : null))
+  .attr("rel", ({ external }) => (external ? "noopener noreferrer" : null));
+
+const nav = html<{ external: boolean }>`
+  <nav>
+    <a ${link} href="/docs">Documentation</a>
+  </nav>
+`;
+
+nav({ external: true });
+// → <nav><a target="_blank" rel="noopener noreferrer" href="/docs">Documentation</a></nav>
+
+nav({ external: false });
+// → <nav><a href="/docs">Documentation</a></nav>
+```
+
+### Nesting templates
+
+A compiled template is just a `(props?) => string` function, so it slots naturally into another template as a function slot. The `slot()` helper is an explicit alias for the same thing — use whichever reads more clearly:
+
+```ts
+import { html, slot } from "poseui/template";
+
+type Props = { username: string };
+
+const greeting = html<Props>`<span>Hello, ${({ username }) => username}</span>`;
+
+const page = html<Props>`
+  <main>
+    <header>${slot(greeting)}</header>
+  </main>
+`;
+
+page({ username: "Ada" });
+// → <main><header><span>Hello, Ada</span></header></main>
+```
+
+### Full example
+
+```ts
+import { html } from "poseui/template";
 import { createPose } from "poseui";
+import { z } from "zod";
 
-export const pose = createPose();
+const pose = createPose();
 
-export const button = pose
-  .as("button")
-  .px(4)
-  .py(2)
-  .rounded()
-  .font_semibold()
-  .when("variant", {
-    primary: (b) => b.bg("indigo-600").text_color("white"),
-    secondary: (b) => b.bg("slate-200").text_color("slate-900"),
-  });
+const card = pose.as("div").cls("rounded-xl shadow-md p-6 bg-white");
+const loginForm = pose.as("form").attr("method", "post");
+const emailLabel = pose.as("label").cls("text-sm font-medium").attr("for", "email");
+const emailInput = pose
+  .as("input")
+  .cls("form-input w-full")
+  .attrs({ type: "email", id: "email", name: "email" });
+const cardFooter = pose.as("footer").cls("mt-4 flex justify-end gap-2");
+const loginBtn = pose.as("button").cls("btn-primary").attr("type", "submit");
+const googleBtn = pose.as("button").cls("btn-outline").attr("type", "button");
 
-export const badge = pose.as("span").text_xs().font_bold().rounded_full().px(2).py(1);
+const loginCard = html`
+  <div ${card}>
+    <header>
+      <h2 class="text-xl font-semibold">Login to your account</h2>
+      <p class="text-sm text-gray-500">Enter your details below</p>
+    </header>
+    <section class="mt-4">
+      <form ${loginForm}>
+        <div class="grid gap-2">
+          <label ${emailLabel}>Email</label>
+          <input ${emailInput} />
+        </div>
+      </form>
+    </section>
+    <footer ${cardFooter}>
+      <button ${loginBtn}>Login</button>
+      <button ${googleBtn}>Login with Google</button>
+    </footer>
+  </div>
+`;
+
+loginCard();
 ```
-
-```ts
-// build.ts
-import { writeFileSync } from "fs";
-import { pose } from "./components";
-
-// Write all statically-known classes to a file your CSS tool can scan
-writeFileSync("pose-safelist.txt", pose.getAllClasses());
-// → "px-4 py-2 rounded font-semibold bg-indigo-600 text-white bg-slate-200
-//    text-slate-900 text-xs font-bold rounded-full px-2 py-1"
-```
-
-```bash
-npx @tailwindcss/cli -i input.css --content pose-safelist.txt -o dist.css
-```
-
-Or UnoCSS:
-
-```ts
-import { pose } from "./components";
-import { generateCSS, createGenerator } from "unocss";
-import { presetWind4 } from "@unocss/preset-wind4";
-
-const uno = createGenerator({ presets: [presetWind4()] });
-
-const classes = pose.getAllClasses();
-const { css } = await uno.generate(classes);
-```
-
-`getAllClasses()` only collects static string entries. Classes produced by dynamic functions — e.g. `opacity(({ active }) => active ? 100 : 50)` — are intentionally excluded since their values are unknowable without props. Use `.cls()` with static strings or `.when()` with explicit branches for anything you need in the safelist.
-
-Each `createPose()` call returns a fully isolated instance with its own registry. The default `pose` export is itself a `createPose()` instance, usable as-is for projects that don't need the safelist feature.
 
 ## Validation errors
 

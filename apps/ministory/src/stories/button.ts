@@ -1,7 +1,7 @@
-import { button } from "../lib/components/button";
 import { defineStory } from "../lib/utils";
+import { pose } from "../ui";
 
 export const buttonStory = defineStory({
-  args: { text: "Click me" },
-  component: button,
+  args: { child: "Click me" },
+  component: pose.as("button").btn(),
 });

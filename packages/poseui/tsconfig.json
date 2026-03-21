@@ -28,7 +28,8 @@
 
     "paths": {
       "poseui": ["./src/index.ts"],
-      "poseui/presets": ["./src/presets/index.ts"]
+      "poseui/presets/tailwind4": ["./src/presets/tailwind4/index.ts"],
+      "poseui/presets/basecoat": ["./src/presets/basecoat/index.ts"]
     }
   }
 }
