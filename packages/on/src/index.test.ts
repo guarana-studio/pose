@@ -1,4 +1,5 @@
 import { it, expect, describe, beforeEach, mock } from "bun:test";
+
 import { createEventMap } from "./index";
 
 // ---------------------------------------------------------------------------

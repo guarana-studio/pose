@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { describe, it, expect, mock, beforeEach } from "bun:test";
+
 import { createStore, effectScope } from "./index";
 
 // ---------------------------------------------------------------------------

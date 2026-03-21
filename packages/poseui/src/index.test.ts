@@ -1,8 +1,13 @@
+// =============================================================================
+// Tests the engine with no preset. Zero tailwind dependency.
+// Run with: bun test
+// =============================================================================
+
 import { it, expect, describe, expectTypeOf } from "bun:test";
-import { PoseValidationError, div, createPose } from "./";
+
+import { PoseValidationError, div, createPose } from "poseui";
+import type { PoseElement } from "poseui";
 import { z } from "zod";
-import { tailwind4 } from "./presets";
-import type { PoseElement } from "./";
 
 // ---------------------------------------------------------------------------
 // Basic rendering
@@ -44,51 +49,11 @@ describe("basic rendering", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Styling
-// ---------------------------------------------------------------------------
-
-describe("styling", () => {
-  const pose = createPose({ presets: [tailwind4] });
-
-  it("applies a single static class", () => {
-    expect(pose.as("div").flex()()).toEqual('<div class="flex"></div>');
-  });
-
-  it("applies multiple classes in chain order", () => {
-    expect(pose.as("div").flex().items_center().gap(4)()).toEqual(
-      '<div class="flex items-center gap-4"></div>',
-    );
-  });
-
-  it("applies dynamic class from a function", () => {
-    const el = pose
-      .as("div")
-      .input(z.object({ variant: z.enum(["primary", "secondary"]).default("primary") }))
-      .bg(({ variant }) => (variant === "primary" ? "blue-500" : "neutral-500"));
-
-    expect(el({ variant: "primary" })).toEqual('<div class="bg-blue-500"></div>');
-    expect(el({ variant: "secondary" })).toEqual('<div class="bg-neutral-500"></div>');
-  });
-
-  it("applies mix of static and dynamic classes", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ active: z.boolean().default(false) }))
-      .flex()
-      .rounded()
-      .opacity(({ active }) => (active ? 100 : 50));
-
-    expect(el({ active: true })).toEqual('<button class="flex rounded opacity-100"></button>');
-    expect(el({ active: false })).toEqual('<button class="flex rounded opacity-50"></button>');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Input / schema
+// .input() / schema
 // ---------------------------------------------------------------------------
 
 describe(".input()", () => {
-  const pose = createPose({ presets: [tailwind4] });
+  const pose = createPose();
 
   it("infers props from schema output type", () => {
     const el = pose
@@ -117,18 +82,7 @@ describe(".input()", () => {
     expect(el({ name: "  hello  " })).toEqual("<div>HELLO</div>");
   });
 
-  it("can be placed after style methods", () => {
-    const el = pose
-      .as("div")
-      .flex()
-      .gap(2)
-      .input(z.object({ label: z.string() }))
-      .child(({ label }) => label);
-
-    expect(el({ label: "test" })).toEqual('<div class="flex gap-2">test</div>');
-  });
-
-  it("throws PozeValidationError on invalid props", () => {
+  it("throws PoseValidationError on invalid props", () => {
     const el = pose
       .as("div")
       .input(z.object({ age: z.number().min(0) }))
@@ -137,7 +91,7 @@ describe(".input()", () => {
     expect(() => el({ age: -1 })).toThrow(PoseValidationError);
   });
 
-  it("PozeValidationError has structured issues", () => {
+  it("PoseValidationError has structured issues", () => {
     const el = pose.as("div").input(z.object({ name: z.string().min(1, "Name is required") }));
 
     try {
@@ -151,7 +105,7 @@ describe(".input()", () => {
     }
   });
 
-  it("PozeValidationError message includes field path", () => {
+  it("PoseValidationError message includes field path", () => {
     const el = pose.as("div").input(z.object({ user: z.object({ name: z.string().min(1) }) }));
 
     try {
@@ -198,7 +152,6 @@ describe("nesting", () => {
 
   it("renders deeply nested elements", () => {
     const el = pose.as("div").child(pose.as("div").child(pose.as("span").child("deep")));
-
     expect(el()).toEqual("<div><div><span>deep</span></div></div>");
   });
 
@@ -212,7 +165,7 @@ describe("nesting", () => {
     expect(el()).toEqual("<div></div>");
   });
 
-  it("renders variant child", () => {
+  it("renders variant child via .when()", () => {
     const el = pose
       .as("div")
       .input(z.object({ route: z.enum(["home", "about"]) }))
@@ -238,198 +191,11 @@ describe("nesting", () => {
 });
 
 // ---------------------------------------------------------------------------
-// .when() — predicate form
-// ---------------------------------------------------------------------------
-
-describe(".when() predicate form", () => {
-  const pose = createPose({ presets: [tailwind4] });
-
-  it("applies classes when predicate is true", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ disabled: z.boolean().default(false) }))
-      .when(
-        ({ disabled }) => disabled,
-        (b) => b.opacity(50).cursor_not_allowed(),
-      );
-
-    expect(el({ disabled: true })).toEqual(
-      '<button class="opacity-50 cursor-not-allowed"></button>',
-    );
-  });
-
-  it("emits no classes when predicate is false", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ disabled: z.boolean().default(false) }))
-      .when(
-        ({ disabled }) => disabled,
-        (b) => b.opacity(50).cursor_not_allowed(),
-      );
-
-    expect(el({ disabled: false })).toEqual("<button></button>");
-  });
-
-  it("stacks multiple predicate when() calls independently", () => {
-    const el = pose
-      .as("div")
-      .input(z.object({ bold: z.boolean().default(false), italic: z.boolean().default(false) }))
-      .when(
-        ({ bold }) => bold,
-        (b) => b.font_bold(),
-      )
-      .when(
-        ({ italic }) => italic,
-        (b) => b.italic(),
-      );
-
-    expect(el({ bold: true, italic: false })).toEqual('<div class="font-bold"></div>');
-    expect(el({ bold: false, italic: true })).toEqual('<div class="italic"></div>');
-    expect(el({ bold: true, italic: true })).toEqual('<div class="font-bold italic"></div>');
-    expect(el({ bold: false, italic: false })).toEqual("<div></div>");
-  });
-
-  it("combines with base styles correctly", () => {
-    const el = pose
-      .as("div")
-      .input(z.object({ active: z.boolean().default(false) }))
-      .flex()
-      .rounded()
-      .when(
-        ({ active }) => active,
-        (b) => b.ring_w(2).ring_color("blue-500"),
-      );
-
-    expect(el({ active: true })).toEqual('<div class="flex rounded ring-2 ring-blue-500"></div>');
-    expect(el({ active: false })).toEqual('<div class="flex rounded"></div>');
-  });
-
-  it("supports multi-field predicates", () => {
-    const el = pose
-      .as("button")
-      .input(
-        z.object({
-          variant: z.enum(["primary", "secondary"]).default("primary"),
-          disabled: z.boolean().default(false),
-        }),
-      )
-      .when(
-        ({ variant, disabled }) => variant === "primary" && !disabled,
-        (b) => b.bg("blue-600"),
-      );
-
-    expect(el({ variant: "primary", disabled: false })).toEqual(
-      '<button class="bg-blue-600"></button>',
-    );
-    expect(el({ variant: "primary", disabled: true })).toEqual("<button></button>");
-    expect(el({ variant: "secondary", disabled: false })).toEqual("<button></button>");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// .when() — value switch form
-// ---------------------------------------------------------------------------
-
-describe(".when() value switch form", () => {
-  const pose = createPose({ presets: [tailwind4] });
-
-  it("applies matching case", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ variant: z.enum(["primary", "secondary"]).default("primary") }))
-      .when("variant", {
-        primary: (b) => b.bg("blue-500"),
-        secondary: (b) => b.bg("neutral-500"),
-      });
-
-    expect(el({ variant: "primary" })).toEqual('<button class="bg-blue-500"></button>');
-    expect(el({ variant: "secondary" })).toEqual('<button class="bg-neutral-500"></button>');
-  });
-
-  it("emits no classes for an unhandled case (Partial)", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ variant: z.enum(["primary", "secondary", "ghost"]).default("primary") }))
-      .when("variant", {
-        primary: (b) => b.bg("blue-500"),
-      });
-
-    expect(el({ variant: "ghost" })).toEqual("<button></button>");
-  });
-
-  it("stacks multiple value when() calls", () => {
-    const el = pose
-      .as("button")
-      .input(
-        z.object({
-          variant: z.enum(["primary", "secondary"]).default("primary"),
-          size: z.enum(["sm", "md", "lg"]).default("md"),
-        }),
-      )
-      .when("variant", {
-        primary: (b) => b.bg("blue-500").text_color("white"),
-        secondary: (b) => b.bg("neutral-200").text_color("neutral-900"),
-      })
-      .when("size", {
-        sm: (b) => b.px(2).py(1).text_sm(),
-        md: (b) => b.px(4).py(2).text_base(),
-        lg: (b) => b.px(6).py(3).text_lg(),
-      });
-
-    expect(el({ variant: "primary", size: "sm" })).toEqual(
-      '<button class="bg-blue-500 text-white px-2 py-1 text-sm"></button>',
-    );
-    expect(el({ variant: "secondary", size: "lg" })).toEqual(
-      '<button class="bg-neutral-200 text-neutral-900 px-6 py-3 text-lg"></button>',
-    );
-  });
-
-  it("mixes value and predicate when() calls", () => {
-    const el = pose
-      .as("button")
-      .input(
-        z.object({
-          variant: z.enum(["primary", "secondary"]).default("primary"),
-          disabled: z.boolean().default(false),
-        }),
-      )
-      .when("variant", {
-        primary: (b) => b.bg("blue-500"),
-        secondary: (b) => b.bg("neutral-500"),
-      })
-      .when(
-        ({ disabled }) => disabled,
-        (b) => b.opacity(50).pointer_events_none(),
-      );
-
-    expect(el({ variant: "primary", disabled: true })).toEqual(
-      '<button class="bg-blue-500 opacity-50 pointer-events-none"></button>',
-    );
-    expect(el({ variant: "secondary", disabled: false })).toEqual(
-      '<button class="bg-neutral-500"></button>',
-    );
-  });
-
-  it("branch builder emits multiple classes", () => {
-    const el = pose
-      .as("div")
-      .input(z.object({ size: z.enum(["sm", "lg"]).default("sm") }))
-      .when("size", {
-        sm: (b) => b.p(2).text_sm().rounded(),
-        lg: (b) => b.p(6).text_lg().rounded("xl"),
-      });
-
-    expect(el({ size: "sm" })).toEqual('<div class="p-2 text-sm rounded"></div>');
-    expect(el({ size: "lg" })).toEqual('<div class="p-6 text-lg rounded-xl"></div>');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // .attr() — single attribute
 // ---------------------------------------------------------------------------
 
 describe(".attr()", () => {
-  const pose = createPose({ presets: [tailwind4] });
+  const pose = createPose();
 
   it("renders a static attribute", () => {
     expect(pose.as("a").attr("href", "/home")()).toEqual('<a href="/home"></a>');
@@ -469,14 +235,8 @@ describe(".attr()", () => {
     expect(el()).toEqual('<a href="/home" target="_blank" rel="noopener"></a>');
   });
 
-  it("renders attributes alongside classes", () => {
-    const el = pose.as("a").flex().text_color("blue-600").attr("href", "/home");
-    expect(el()).toEqual('<a class="flex text-blue-600" href="/home"></a>');
-  });
-
   it("renders attributes with children", () => {
-    const el = pose.as("a").attr("href", "/home").child("Home");
-    expect(el()).toEqual('<a href="/home">Home</a>');
+    expect(pose.as("a").attr("href", "/home").child("Home")()).toEqual('<a href="/home">Home</a>');
   });
 
   it("survives .input() placed after .attr()", () => {
@@ -496,7 +256,7 @@ describe(".attr()", () => {
 // ---------------------------------------------------------------------------
 
 describe(".attrs()", () => {
-  const pose = createPose({ presets: [tailwind4] });
+  const pose = createPose();
 
   it("renders a static record of attributes", () => {
     expect(pose.as("input").attrs({ type: "text", name: "email" })()).toEqual(
@@ -523,8 +283,9 @@ describe(".attrs()", () => {
   });
 
   it("omits null values from the record", () => {
-    const el = pose.as("div").attrs({ id: "box", "data-hidden": null });
-    expect(el()).toEqual('<div id="box"></div>');
+    expect(pose.as("div").attrs({ id: "box", "data-hidden": null })()).toEqual(
+      '<div id="box"></div>',
+    );
   });
 
   it("renders a props function form", () => {
@@ -550,21 +311,6 @@ describe(".attrs()", () => {
       .attrs({ autocomplete: "off", spellcheck: "false" });
 
     expect(el()).toEqual('<input type="text" autocomplete="off" spellcheck="false"></input>');
-  });
-
-  it("renders attrs alongside classes and children", () => {
-    const el = pose
-      .as("a")
-      .input(z.object({ url: z.string(), label: z.string() }))
-      .flex()
-      .items_center()
-      .text_color("blue-600")
-      .attrs(({ url }) => ({ href: url, target: "_blank" }))
-      .child(({ label }) => label);
-
-    expect(el({ url: "/about", label: "About" })).toEqual(
-      '<a class="flex items-center text-blue-600" href="/about" target="_blank">About</a>',
-    );
   });
 
   it("mixes .attr() and .attrs()", () => {
@@ -607,175 +353,103 @@ describe(".attrs()", () => {
 // ---------------------------------------------------------------------------
 
 describe(".getClasses()", () => {
-  const pose = createPose({ presets: [tailwind4] });
+  const pose = createPose();
 
   it("returns an empty string when no classes are applied", () => {
     expect(pose.as("div").getClasses()).toEqual("");
   });
 
-  it("returns static classes without calling the element", () => {
-    const el = pose.as("div").flex().items_center().p(4);
-    expect(el.getClasses()).toEqual("flex items-center p-4");
-  });
-
-  it("returns the same string as the class attribute on the rendered element", () => {
-    const el = pose.as("div").flex().gap(2).rounded().font_bold();
-    const html = el();
-    const classAttr = html.match(/class="([^"]+)"/)?.[1] ?? "";
-    expect(el.getClasses()).toEqual(classAttr);
-  });
-
-  it("evaluates dynamic class entries against supplied props", () => {
+  it("evaluates dynamic .cls() entries against supplied props", () => {
     const el = pose
-      .as("button")
-      .input(z.object({ disabled: z.boolean().default(false) }))
-      .flex()
-      .opacity(({ disabled }) => (disabled ? 50 : 100));
+      .as("div")
+      .input(z.object({ active: z.boolean().default(false) }))
+      .cls(({ active }) => (active ? "is-active" : ""));
 
-    expect(el.getClasses({ disabled: true })).toEqual("flex opacity-50");
-    expect(el.getClasses({ disabled: false })).toEqual("flex opacity-100");
+    expect(el.getClasses({ active: true })).toEqual("is-active");
+    expect(el.getClasses({ active: false })).toEqual("");
   });
 
   it("defaults props to {} when called with no arguments", () => {
     const el = pose
       .as("div")
       .input(z.object({ active: z.boolean().default(false) }))
-      .flex()
-      .when(
-        ({ active }) => active,
-        (b) => b.ring_w(2),
-      );
+      .cls(({ active }) => (active ? "ring" : ""));
 
-    expect(el.getClasses()).toEqual("flex");
-  });
-
-  it("resolves .when() branches against props", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ variant: z.enum(["primary", "secondary"]).default("primary") }))
-      .when("variant", {
-        primary: (b) => b.bg("indigo-600").text_color("white"),
-        secondary: (b) => b.bg("slate-200").text_color("slate-900"),
-      });
-
-    expect(el.getClasses({ variant: "primary" })).toEqual("bg-indigo-600 text-white");
-    expect(el.getClasses({ variant: "secondary" })).toEqual("bg-slate-200 text-slate-900");
-  });
-
-  it("survives being called on a builder that has .input() after style methods", () => {
-    const el = pose
-      .as("div")
-      .flex()
-      .gap(4)
-      .input(z.object({ size: z.enum(["sm", "lg"]).default("sm") }))
-      .when("size", {
-        sm: (b) => b.p(2),
-        lg: (b) => b.p(8),
-      });
-
-    expect(el.getClasses({ size: "sm" })).toEqual("flex gap-4 p-2");
-    expect(el.getClasses({ size: "lg" })).toEqual("flex gap-4 p-8");
+    expect(el.getClasses()).toEqual("");
   });
 });
 
 // ---------------------------------------------------------------------------
-// createPose() + pose.getAllClasses()
+// createPose() + getAllClasses()
 // ---------------------------------------------------------------------------
 
 describe("createPose() and getAllClasses()", () => {
-  it("createPose() returns a fresh independent instance", () => {
-    const a = createPose({ presets: [tailwind4] });
-    const b = createPose({ presets: [tailwind4] });
-    a.as("div").flex().p(4);
+  it("returns a fresh independent instance", () => {
+    const a = createPose();
+    const b = createPose();
+    a.as("div").cls("only-in-a");
     expect(b.getAllClasses()).toEqual("");
   });
 
-  it("getAllClasses() returns empty string on a fresh instance with no elements", () => {
-    const p = createPose();
-    expect(p.getAllClasses()).toEqual("");
+  it("getAllClasses() is empty on a fresh instance", () => {
+    expect(createPose().getAllClasses()).toEqual("");
   });
 
-  it("collects static classes from a single element", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("div").flex().items_center().gap(4);
-    expect(p.getAllClasses()).toEqual("flex items-center gap-4");
+  it("collects static classes from .cls()", () => {
+    const p = createPose();
+    p.as("div").cls("foo").cls("bar");
+    const all = p.getAllClasses();
+    expect(all).toContain("foo");
+    expect(all).toContain("bar");
   });
 
   it("collects static classes across multiple elements", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("button").px(4).py(2).rounded().font_semibold();
-    p.as("span").text_xs().font_bold().text_color("slate-500");
+    const p = createPose();
+    p.as("div").cls("alpha");
+    p.as("span").cls("beta");
     const all = p.getAllClasses();
-    for (const cls of [
-      "px-4",
-      "py-2",
-      "rounded",
-      "font-semibold",
-      "text-xs",
-      "font-bold",
-      "text-slate-500",
-    ]) {
-      expect(all).toContain(cls);
-    }
+    expect(all).toContain("alpha");
+    expect(all).toContain("beta");
   });
 
   it("deduplicates classes shared across elements", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("div").flex().gap(4);
-    p.as("section").flex().gap(4).p(8);
+    const p = createPose();
+    p.as("div").cls("shared").cls("only-a");
+    p.as("span").cls("shared").cls("only-b");
     const classes = p.getAllClasses().split(" ");
-    expect(classes.filter((c) => c === "flex").length).toBe(1);
-    expect(classes.filter((c) => c === "gap-4").length).toBe(1);
+    expect(classes.filter((c) => c === "shared").length).toBe(1);
   });
 
   it("does not include dynamic (function) class entries", () => {
-    const p = createPose({ presets: [tailwind4] });
+    const p = createPose();
     p.as("div")
       .input(z.object({ active: z.boolean().default(false) }))
-      .flex()
-      .opacity(({ active }) => (active ? 100 : 50));
+      .cls("static")
+      .cls(({ active }) => (active ? "dynamic-on" : "dynamic-off"));
 
     const all = p.getAllClasses();
-    expect(all).toContain("flex");
-    expect(all).not.toContain("opacity-100");
-    expect(all).not.toContain("opacity-50");
-  });
-
-  it("picks up classes added through fluent chaining after .as()", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("div").flex().flex_col().items_center().justify_between().gap(6);
-    const all = p.getAllClasses();
-    for (const cls of ["flex", "flex-col", "items-center", "justify-between", "gap-6"]) {
-      expect(all).toContain(cls);
-    }
+    expect(all).toContain("static");
+    expect(all).not.toContain("dynamic-on");
+    expect(all).not.toContain("dynamic-off");
   });
 
   it("collects static classes from .when() branches", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("button")
-      .input(z.object({ variant: z.enum(["primary", "secondary"]).default("primary") }))
-      .when("variant", {
-        primary: (b) => b.bg("indigo-600").text_color("white"),
-        secondary: (b) => b.bg("slate-200").text_color("slate-900"),
+    const p = createPose();
+    p.as("div")
+      .input(z.object({ v: z.enum(["a", "b"]) }))
+      .when("v", {
+        a: (b) => b.cls("branch-a"),
+        b: (b) => b.cls("branch-b"),
       });
 
     const all = p.getAllClasses();
-    for (const cls of ["bg-indigo-600", "text-white", "bg-slate-200", "text-slate-900"]) {
-      expect(all).toContain(cls);
-    }
-  });
-
-  it("isolates registries — default pose export does not bleed into createPose()", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("div").shadow_xl().overflow_hidden();
-    const isolated = p.getAllClasses();
-    expect(isolated).toContain("shadow-xl");
-    expect(isolated).toContain("overflow-hidden");
+    expect(all).toContain("branch-a");
+    expect(all).toContain("branch-b");
   });
 
   it("getAllClasses() is stable across multiple calls", () => {
-    const p = createPose({ presets: [tailwind4] });
-    p.as("div").flex().p(4).rounded();
+    const p = createPose();
+    p.as("div").cls("x").cls("y");
     expect(p.getAllClasses()).toEqual(p.getAllClasses());
   });
 });
@@ -785,9 +459,7 @@ describe("createPose() and getAllClasses()", () => {
 // ---------------------------------------------------------------------------
 
 describe("attr inference — tag-specific attribute names", () => {
-  const pose = createPose({ presets: [tailwind4] });
-
-  // ── Anchor ──────────────────────────────────────────────────────────────
+  const pose = createPose();
 
   it("<a> renders href, target, rel", () => {
     expect(
@@ -807,8 +479,6 @@ describe("attr inference — tag-specific attribute names", () => {
     );
   });
 
-  // ── Button ───────────────────────────────────────────────────────────────
-
   it("<button> renders type attribute", () => {
     expect(pose.as("button").attr("type", "submit")()).toEqual('<button type="submit"></button>');
     expect(pose.as("button").attr("type", "reset")()).toEqual('<button type="reset"></button>');
@@ -823,27 +493,19 @@ describe("attr inference — tag-specific attribute names", () => {
     expect(pose.as("button").attr("disabled", null)()).toEqual("<button></button>");
   });
 
-  it("<button> renders name and value", () => {
+  it("<button> renders name, value, form, formaction, formmethod", () => {
     expect(pose.as("button").attr("name", "action").attr("value", "submit")()).toEqual(
       '<button name="action" value="submit"></button>',
     );
-  });
-
-  it("<button> renders form association", () => {
     expect(pose.as("button").attr("form", "signup-form")()).toEqual(
       '<button form="signup-form"></button>',
     );
-  });
-
-  it("<button> renders formaction and formmethod", () => {
     expect(pose.as("button").attr("formaction", "/alt").attr("formmethod", "post")()).toEqual(
       '<button formaction="/alt" formmethod="post"></button>',
     );
   });
 
-  // ── Input ────────────────────────────────────────────────────────────────
-
-  it("<input> renders type values — email, password, number, checkbox, etc.", () => {
+  it("<input> renders all type values", () => {
     const types = [
       "text",
       "email",
@@ -879,23 +541,11 @@ describe("attr inference — tag-specific attribute names", () => {
     ).toEqual('<input name="email" placeholder="you@example.com" id="email"></input>');
   });
 
-  it("<input> renders required as boolean attribute", () => {
+  it("<input> renders boolean attributes — required, readonly, disabled, checked, multiple", () => {
     expect(pose.as("input").attr("required", "")()).toEqual("<input required></input>");
-  });
-
-  it("<input> renders readonly as boolean attribute", () => {
     expect(pose.as("input").attr("readonly", "")()).toEqual("<input readonly></input>");
-  });
-
-  it("<input> renders disabled as boolean attribute", () => {
     expect(pose.as("input").attr("disabled", "")()).toEqual("<input disabled></input>");
-  });
-
-  it("<input> renders checked as boolean attribute", () => {
     expect(pose.as("input").attr("checked", "")()).toEqual("<input checked></input>");
-  });
-
-  it("<input> renders multiple as boolean attribute", () => {
     expect(pose.as("input").attr("multiple", "")()).toEqual("<input multiple></input>");
   });
 
@@ -911,37 +561,22 @@ describe("attr inference — tag-specific attribute names", () => {
     );
   });
 
-  // ── Textarea ──────────────────────────────────────────────────────────────
-
-  it("<textarea> renders rows, cols, placeholder", () => {
+  it("<textarea> renders rows, cols, placeholder, wrap, disabled, readonly", () => {
     expect(
       pose.as("textarea").attrs({ rows: "4", cols: "40", placeholder: "Your message" })(),
     ).toEqual('<textarea rows="4" cols="40" placeholder="Your message"></textarea>');
-  });
-
-  it("<textarea> renders disabled and readonly as boolean attributes", () => {
     expect(pose.as("textarea").attr("disabled", "").attr("readonly", "")()).toEqual(
       "<textarea disabled readonly></textarea>",
     );
-  });
-
-  it("<textarea> renders wrap attribute", () => {
     expect(pose.as("textarea").attr("wrap", "hard")()).toEqual('<textarea wrap="hard"></textarea>');
   });
 
-  // ── Select ───────────────────────────────────────────────────────────────
-
-  it("<select> renders name, required, disabled, multiple", () => {
+  it("<select> renders name, required, disabled, multiple, size", () => {
     expect(
       pose.as("select").attrs({ name: "country", required: "", disabled: "", multiple: "" })(),
     ).toEqual('<select name="country" required disabled multiple></select>');
-  });
-
-  it("<select> renders size", () => {
     expect(pose.as("select").attr("size", "5")()).toEqual('<select size="5"></select>');
   });
-
-  // ── Option / Optgroup ─────────────────────────────────────────────────────
 
   it("<option> renders value, selected, disabled", () => {
     expect(
@@ -958,65 +593,37 @@ describe("attr inference — tag-specific attribute names", () => {
     );
   });
 
-  // ── Form ──────────────────────────────────────────────────────────────────
-
-  it("<form> renders action, method, enctype", () => {
+  it("<form> renders action, method, enctype, novalidate, target", () => {
     expect(
-      pose.as("form").attrs({
-        action: "/submit",
-        method: "post",
-        enctype: "multipart/form-data",
-      })(),
+      pose
+        .as("form")
+        .attrs({ action: "/submit", method: "post", enctype: "multipart/form-data" })(),
     ).toEqual('<form action="/submit" method="post" enctype="multipart/form-data"></form>');
-  });
-
-  it("<form> renders novalidate as boolean attribute", () => {
     expect(pose.as("form").attr("novalidate", "")()).toEqual("<form novalidate></form>");
-  });
-
-  it("<form> renders target", () => {
     expect(pose.as("form").attr("target", "_blank")()).toEqual('<form target="_blank"></form>');
   });
 
-  // ── Label ────────────────────────────────────────────────────────────────
-
-  it("<label> renders for attribute (IDL htmlFor → content attr for)", () => {
+  it("<label> uses 'for' not 'htmlFor'", () => {
     expect(pose.as("label").attr("for", "email").child("Email")()).toEqual(
       '<label for="email">Email</label>',
     );
   });
 
-  // ── Img ──────────────────────────────────────────────────────────────────
-
-  it("<img> renders src, alt, width, height", () => {
+  it("<img> renders src, alt, width, height, loading, decoding, srcset, sizes", () => {
     expect(
       pose.as("img").attrs({ src: "/logo.png", alt: "Logo", width: "200", height: "50" })(),
     ).toEqual('<img src="/logo.png" alt="Logo" width="200" height="50"></img>');
-  });
-
-  it("<img> renders loading=lazy", () => {
     expect(pose.as("img").attr("loading", "lazy")()).toEqual('<img loading="lazy"></img>');
-  });
-
-  it("<img> renders decoding attribute", () => {
     expect(pose.as("img").attr("decoding", "async")()).toEqual('<img decoding="async"></img>');
-  });
-
-  it("<img> renders srcset and sizes", () => {
     expect(
       pose.as("img").attrs({ srcset: "img-2x.png 2x", sizes: "(max-width: 600px) 100vw" })(),
     ).toEqual('<img srcset="img-2x.png 2x" sizes="(max-width: 600px) 100vw"></img>');
   });
 
-  // ── Video / Audio ─────────────────────────────────────────────────────────
-
-  it("<video> renders src, controls, autoplay, loop, muted as boolean attrs", () => {
+  it("<video> renders src, controls, autoplay, muted, width, height, poster, preload", () => {
     expect(
       pose.as("video").attrs({ src: "/clip.mp4", controls: "", autoplay: "", muted: "" })(),
     ).toEqual('<video src="/clip.mp4" controls autoplay muted></video>');
-  });
-
-  it("<video> renders width, height, poster, preload", () => {
     expect(
       pose
         .as("video")
@@ -1030,53 +637,38 @@ describe("attr inference — tag-specific attribute names", () => {
     ).toEqual('<audio src="/track.mp3" controls loop muted></audio>');
   });
 
-  // ── Iframe ────────────────────────────────────────────────────────────────
-
-  it("<iframe> renders src, width, height, title", () => {
+  it("<iframe> renders src, width, height, title, allowfullscreen, sandbox", () => {
     expect(
       pose
         .as("iframe")
         .attrs({ src: "https://example.com", width: "600", height: "400", title: "Demo" })(),
     ).toEqual('<iframe src="https://example.com" width="600" height="400" title="Demo"></iframe>');
-  });
-
-  it("<iframe> renders allowfullscreen as boolean attribute", () => {
     expect(pose.as("iframe").attr("allowfullscreen", "")()).toEqual(
       "<iframe allowfullscreen></iframe>",
     );
-  });
-
-  it("<iframe> renders sandbox attribute", () => {
     expect(pose.as("iframe").attr("sandbox", "allow-scripts allow-same-origin")()).toEqual(
       '<iframe sandbox="allow-scripts allow-same-origin"></iframe>',
     );
   });
 
-  // ── Script / Link / Meta ──────────────────────────────────────────────────
-
-  it("<script> renders src, type, async, defer as boolean attrs", () => {
+  it("<script> renders src, type, async, defer", () => {
     expect(
       pose.as("script").attrs({ src: "/app.js", type: "module", async: "", defer: "" })(),
     ).toEqual('<script src="/app.js" type="module" async defer></script>');
   });
 
-  it("<link> renders rel, href, type for stylesheet", () => {
+  it("<link> renders rel, href, type", () => {
     expect(
       pose.as("link").attrs({ rel: "stylesheet", href: "/app.css", type: "text/css" })(),
     ).toEqual('<link rel="stylesheet" href="/app.css" type="text/css"></link>');
   });
 
-  it("<meta> renders name and content", () => {
+  it("<meta> renders name, content, charset", () => {
     expect(
       pose.as("meta").attrs({ name: "description", content: "My page description" })(),
     ).toEqual('<meta name="description" content="My page description"></meta>');
-  });
-
-  it("<meta> renders charset", () => {
     expect(pose.as("meta").attr("charset", "UTF-8")()).toEqual('<meta charset="UTF-8"></meta>');
   });
-
-  // ── Table elements ────────────────────────────────────────────────────────
 
   it("<td> renders colspan, rowspan, headers", () => {
     expect(pose.as("td").attrs({ colspan: "2", rowspan: "3", headers: "col1" })()).toEqual(
@@ -1084,25 +676,18 @@ describe("attr inference — tag-specific attribute names", () => {
     );
   });
 
-  it("<th> renders scope attribute", () => {
+  it("<th> renders scope", () => {
     expect(pose.as("th").attr("scope", "col").child("Name")()).toEqual('<th scope="col">Name</th>');
   });
 
-  it("<col> renders span attribute", () => {
+  it("<col> renders span", () => {
     expect(pose.as("col").attr("span", "2")()).toEqual('<col span="2"></col>');
   });
 
-  // ── Dialog / Details ─────────────────────────────────────────────────────
-
-  it("<dialog> renders open as boolean attribute", () => {
+  it("<dialog> and <details> render open as boolean attribute", () => {
     expect(pose.as("dialog").attr("open", "")()).toEqual("<dialog open></dialog>");
-  });
-
-  it("<details> renders open as boolean attribute", () => {
     expect(pose.as("details").attr("open", "")()).toEqual("<details open></details>");
   });
-
-  // ── Progress / Meter ─────────────────────────────────────────────────────
 
   it("<progress> renders value and max", () => {
     expect(pose.as("progress").attrs({ value: "70", max: "100" })()).toEqual(
@@ -1118,9 +703,7 @@ describe("attr inference — tag-specific attribute names", () => {
     ).toEqual('<meter min="0" max="100" value="60" low="25" high="75" optimum="80"></meter>');
   });
 
-  // ── Global attrs on all elements ──────────────────────────────────────────
-
-  it("id, class, style, tabindex are valid on every element", () => {
+  it("global attrs — id, class, style, tabindex valid on every element", () => {
     const tags = ["div", "span", "p", "section", "article", "button", "input"] as const;
     for (const tag of tags) {
       expect(
@@ -1129,150 +712,67 @@ describe("attr inference — tag-specific attribute names", () => {
     }
   });
 
-  it("hidden is a valid global boolean attribute", () => {
+  it("global attrs — hidden, lang, dir, contenteditable, draggable", () => {
     expect(pose.as("div").attr("hidden", "")()).toEqual("<div hidden></div>");
-  });
-
-  it("lang attribute is valid globally", () => {
     expect(pose.as("html").attr("lang", "en")()).toEqual('<html lang="en"></html>');
-  });
-
-  it("dir attribute is valid globally", () => {
     expect(pose.as("p").attr("dir", "rtl").child("مرحبا")()).toEqual('<p dir="rtl">مرحبا</p>');
-  });
-
-  it("contenteditable is valid globally", () => {
     expect(pose.as("div").attr("contenteditable", "true")()).toEqual(
       '<div contenteditable="true"></div>',
     );
-  });
-
-  it("draggable is valid globally", () => {
     expect(pose.as("div").attr("draggable", "true")()).toEqual('<div draggable="true"></div>');
   });
 
-  // ── data-* ────────────────────────────────────────────────────────────────
-
-  it("data-* attributes are always accepted on any element", () => {
+  it("data-* attributes are always accepted", () => {
     expect(
       pose
         .as("div")
         .attrs({ "data-id": "42", "data-user-role": "admin", "data-testid": "container" })(),
     ).toEqual('<div data-id="42" data-user-role="admin" data-testid="container"></div>');
-  });
-
-  it("data-* works on specialised elements too", () => {
     expect(pose.as("button").attr("data-action", "close")()).toEqual(
       '<button data-action="close"></button>',
     );
   });
 
-  // ── aria-* ────────────────────────────────────────────────────────────────
-
-  it("aria-label is valid on any element", () => {
+  it("aria-* attributes are always accepted", () => {
     expect(pose.as("button").attr("aria-label", "Close dialog")()).toEqual(
       '<button aria-label="Close dialog"></button>',
     );
-  });
-
-  it("aria-hidden is valid on any element", () => {
     expect(pose.as("span").attr("aria-hidden", "true")()).toEqual(
       '<span aria-hidden="true"></span>',
     );
-  });
-
-  it("aria-expanded and aria-controls render correctly", () => {
     expect(
       pose.as("button").attrs({ "aria-expanded": "false", "aria-controls": "menu" })(),
     ).toEqual('<button aria-expanded="false" aria-controls="menu"></button>');
-  });
-
-  it("role attribute is valid globally", () => {
     expect(pose.as("div").attr("role", "navigation")()).toEqual('<div role="navigation"></div>');
   });
 
-  // ── IDL normalisation — content attribute names, not JS property names ────
-
-  it("uses 'class' not 'className'", () => {
-    // class is in GlobalAttrs; className is the IDL name we do NOT expose
+  it("IDL normalisation — content attribute names, not JS property names", () => {
     expect(pose.as("div").attr("class", "foo bar")()).toEqual('<div class="foo bar"></div>');
-  });
-
-  it("uses 'for' not 'htmlFor' on <label>", () => {
     expect(pose.as("label").attr("for", "name")()).toEqual('<label for="name"></label>');
-  });
-
-  it("uses 'tabindex' not 'tabIndex'", () => {
     expect(pose.as("div").attr("tabindex", "0")()).toEqual('<div tabindex="0"></div>');
-  });
-
-  it("uses 'readonly' not 'readOnly' on <input>", () => {
     expect(pose.as("input").attr("readonly", "")()).toEqual("<input readonly></input>");
-  });
-
-  it("uses 'maxlength' not 'maxLength' on <input>", () => {
     expect(pose.as("input").attr("maxlength", "255")()).toEqual('<input maxlength="255"></input>');
-  });
-
-  it("uses 'colspan' not 'colSpan' on <td>", () => {
     expect(pose.as("td").attr("colspan", "3")()).toEqual('<td colspan="3"></td>');
-  });
-
-  it("uses 'rowspan' not 'rowSpan' on <td>", () => {
     expect(pose.as("td").attr("rowspan", "2")()).toEqual('<td rowspan="2"></td>');
   });
 
-  // ── TTag preserved through chain ──────────────────────────────────────────
+  it("TTag preserved through .cls(), .child(), .input()", () => {
+    const a = pose.as("button").cls("x").attr("type", "button");
+    expect(a()).toEqual('<button class="x" type="button"></button>');
 
-  it("TTag is preserved through .cls()", () => {
-    // type-level: .attr() after .cls() should still infer button attrs
-    const el = pose.as("button").cls("my-class").attr("type", "button");
-    expect(el()).toEqual('<button class="my-class" type="button"></button>');
-  });
+    const b = pose.as("a").child("Link").attr("href", "/");
+    expect(b()).toEqual('<a href="/">Link</a>');
 
-  it("TTag is preserved through .child()", () => {
-    const el = pose.as("a").child("Link").attr("href", "/");
-    expect(el()).toEqual('<a href="/">Link</a>');
-  });
-
-  it("TTag is preserved through .input()", () => {
-    const el = pose
+    const c = pose
       .as("input")
       .input(z.object({ val: z.string().default("ada@example.com") }))
       .attr("type", "email")
       .attr("value", ({ val }) => val)
       .attr("required", "");
-
-    expect(el()).toEqual('<input type="email" value="ada@example.com" required></input>');
+    expect(c()).toEqual('<input type="email" value="ada@example.com" required></input>');
   });
 
-  it("TTag is preserved through .when()", () => {
-    const el = pose
-      .as("button")
-      .input(z.object({ disabled: z.boolean().default(false) }))
-      .when(
-        ({ disabled }) => disabled,
-        (b) => b.opacity(50),
-      )
-      .attr("type", "submit");
-
-    expect(el({ disabled: false })).toEqual('<button type="submit"></button>');
-    expect(el({ disabled: true })).toEqual('<button class="opacity-50" type="submit"></button>');
-  });
-
-  // ── Dynamic attr values ───────────────────────────────────────────────────
-
-  it("attr value inferred from TTag works with dynamic functions", () => {
-    const el = pose
-      .as("input")
-      .input(z.object({ kind: z.enum(["email", "password", "text"]).default("text") }))
-      .attr("type", ({ kind }) => kind);
-
-    expect(el({ kind: "email" })).toEqual('<input type="email"></input>');
-    expect(el({ kind: "password" })).toEqual('<input type="password"></input>');
-  });
-
-  it("target attr on <a> works dynamically", () => {
+  it("dynamic attr value from props function", () => {
     const el = pose
       .as("a")
       .input(z.object({ external: z.boolean().default(false), url: z.string() }))
@@ -1286,15 +786,13 @@ describe("attr inference — tag-specific attribute names", () => {
     );
   });
 
-  // ── Type-level checks (compile-time only, no runtime assertions needed) ───
-
-  it("type-level: .as() returns PoseElement with correct TTag", () => {
+  it("type-level: .as() carries TTag through the chain", () => {
     expectTypeOf(pose.as("button")).toMatchTypeOf<PoseElement<any, any, "button">>();
     expectTypeOf(pose.as("input")).toMatchTypeOf<PoseElement<any, any, "input">>();
     expectTypeOf(pose.as("a")).toMatchTypeOf<PoseElement<any, any, "a">>();
   });
 
-  it("type-level: TTag preserved through chain produces correct element type", () => {
+  it("type-level: TTag preserved through chain", () => {
     const el = pose.as("input").attr("type", "email").attr("required", "");
     expectTypeOf(el).toMatchTypeOf<PoseElement<any, any, "input">>();
   });

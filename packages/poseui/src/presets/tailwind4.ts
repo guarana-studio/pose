@@ -13,7 +13,7 @@
 //   pose.as("div").flex().p(4).bg("indigo-600");
 // =============================================================================
 
-import type { PoseElement, Dyn, Preset } from "../index";
+import type { PoseElement, Dyn, Preset } from "poseui";
 
 // ---------------------------------------------------------------------------
 // Helpers (mirror of the private tw/arbitrary in index.ts — kept local so

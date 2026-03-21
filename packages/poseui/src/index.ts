@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { match } from "@poseui/match";
+
 import type { AttrName, AttrValueFor, AttrsFor } from "./attrs";
 
 // ---------------------------------------------------------------------------
@@ -112,8 +113,10 @@ type RenderReturn<TSchema extends StandardSchemaV1 | undefined> = TSchema extend
     : string
   : string;
 
-type CallArgs<TProps extends Record<string, unknown>, TSchema> = TSchema extends StandardSchemaV1
-  ? [TProps?]
+type CallArgs<TProps extends Record<string, unknown>, TSchema> = [TSchema] extends [
+  StandardSchemaV1,
+]
+  ? [Partial<TProps>?]
   : [keyof TProps] extends [never]
     ? [TProps?]
     : [TProps];

@@ -24,6 +24,11 @@
     // Some stricter flags (disabled by default)
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+
+    "paths": {
+      "poseui": ["./src/index.ts"],
+      "poseui/presets": ["./src/presets/index.ts"]
+    }
   }
 }
