@@ -187,7 +187,7 @@ function isOpeningTagPosition(preceding: string): boolean {
   // If there's a closing `>` after the last `<`, we're outside any tag.
   if (afterOpen.includes(">")) return false;
   // Must look like an element opening, not a closing tag `</…`.
-  return !/^<\//.test(afterOpen);
+  return !afterOpen.startsWith("</");
 }
 
 // ---------------------------------------------------------------------------

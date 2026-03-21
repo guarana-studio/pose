@@ -309,7 +309,7 @@ describe("HandlerContext.render", () => {
     const el = makeEl();
     let savedRender!: (props?: any) => void;
 
-    const component = pose
+    const _component = pose
       .as("div")
       .input(z.object({ label: z.string().default("initial") }))
       .child(({ label }) => label)
@@ -697,13 +697,13 @@ describe("Component nesting — single mount activates all handlers", () => {
       .handler(({ events: evts }) => {
         log.push("inner-handler");
         // Register on the shared events map
-        evts.mount; // access proves events was passed through
+        void evts.mount; // access proves events was passed through
       });
 
     pose
       .as("div")
       .child(inner)
-      .handler(({ events: evts }) => {
+      .handler(({ events: _evts }) => {
         log.push("outer-handler");
       })
       .mount(el, events);
