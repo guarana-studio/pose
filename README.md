@@ -6,14 +6,13 @@ Type-safe HTML for vanilla TypeScript. No framework, no virtual DOM, no compiler
 
 ## Packages
 
-| Package                             | Description                                                  |
-| ----------------------------------- | ------------------------------------------------------------ |
-| [`poseui`](./packages/poseui)       | Core templating engine                                       |
-| [`@poseui/on`](./packages/on)       | Typed DOM event registration                                 |
-| [`@poseui/form`](./packages/form)   | Typed form binding via Standard Schema                       |
-| [`@poseui/store`](./packages/store) | Reactive state backed by alien-signals                       |
-| [`@poseui/match`](./packages/match) | Typed pattern matching for plain objects                     |
-| [`@poseui/kit`](./packages/kit)     | A collection of well-polished UI components made with poseui |
+| Package                             | Description                              |
+| ----------------------------------- | ---------------------------------------- |
+| [`poseui`](./packages/poseui)       | Core templating engine                   |
+| [`@poseui/on`](./packages/on)       | Typed DOM event registration             |
+| [`@poseui/form`](./packages/form)   | Typed form binding via Standard Schema   |
+| [`@poseui/store`](./packages/store) | Reactive state backed by alien-signals   |
+| [`@poseui/match`](./packages/match) | Typed pattern matching for plain objects |
 
 ---
 
