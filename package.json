@@ -5,7 +5,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter '*' build",
+    "build": "bun run --filter './packages/*' build",
     "cleanup": "bun run --filter '*' cleanup",
     "lint": "oxlint",
     "fmt": "oxfmt",
