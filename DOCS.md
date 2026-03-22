@@ -1,6 +1,8 @@
 ---
 title: poseui
 description: Typed components, reactive state, clean DOM - no framework required
+sideBar:
+  extended: true
 footer:
   text: Copyright © %YEAR% poseui
 ---
@@ -203,7 +205,7 @@ Add the `tailwind4` preset for a fluent, type-safe API over Tailwind utilities. 
 
 ```ts
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/presets";
+import { tailwind4 } from "poseui/presets/tailwind4";
 
 const pose = createPose({ presets: [tailwind4] });
 
@@ -569,7 +571,7 @@ Adds fluent methods for every Tailwind v4 utility class. Methods use underscores
 
 ```ts
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/presets";
+import { tailwind4 } from "poseui/presets/tailwind4";
 
 const pose = createPose({ presets: [tailwind4] });
 
@@ -600,7 +602,7 @@ pose
 A typed adapter over [basecoat.css](https://basecoatcss.com), a CSS component library. Each method maps directly to basecoat class names and handles the class derivation logic internally.
 
 ```ts
-import { basecoat } from "@poseui/kit";
+import { basecoat } from "poseui/presets/basecoat";
 
 const pose = createPose({ presets: [tailwind4, basecoat] });
 ```
@@ -640,7 +642,7 @@ button({ variant: "destructive", size: "icon", disabled: true, child: "✕" });
 
 ```ts
 // uno.config.ts
-import { extractorPoseui } from "@poseui/extractor-unocss";
+import { extractorPoseui } from "poseui/unocss";
 
 export default defineConfig({
   extractors: [extractorPoseui()],
