@@ -131,22 +131,6 @@ export type StateCreator<T extends object> = (
   api: StoreApi<T>,
 ) => T;
 
-/**
- * Curried form of createStore — fixes T first, then takes the creator.
- * Identical to zustand/vanilla's pattern; breaks the set/get circular
- * inference that makes `T` fall back to `object` in the single-call form.
- *
- * @example
- * const store = createStore<{ count: number; inc: () => void }>()((set) => ({
- *   count: 0,
- *   inc: () => set((s) => ({ count: s.count + 1 })),
- * }));
- */
-export interface CreateStore {
-  <T extends object>(creator: StateCreator<T>): StoreApi<T>;
-  <T extends object>(): (creator: StateCreator<T>) => StoreApi<T>;
-}
-
 // ---------------------------------------------------------------------------
 // createStore
 // ---------------------------------------------------------------------------
@@ -159,44 +143,45 @@ export interface CreateStore {
  * to state changes via a pose render function, eliminating manual `innerHTML`
  * management.
  *
- * @example
- * import { createStore } from "@poseui/store";
+ * State and action types are inferred automatically from the creator — no
+ * type annotation required. `NoInfer<T>` on `set`/`get`/`api` ensures TypeScript
+ * resolves `T` from the creator's return type first, then checks the parameters
+ * against it — avoiding the circular inference that previously caused `state`
+ * inside updater functions to fall back to `object`.
  *
- * // Inferred form — no type annotation needed for simple state
- * const counter = createStore(() => ({ count: 0 }));
+ * Pass an explicit generic via the curried form when inference can't fully
+ * resolve the type (e.g. `user: User | null` would infer as `user: null`).
  *
- * // Curried form — required when state includes actions (breaks circular inference)
- * const store = createStore<{
- *   count: number;
- *   user: User | null;
- *   inc: () => void;
- *   login: (user: User) => void;
- *   reset: () => void;
- * }>()((set, _get, api) => ({
+ * Requires TypeScript ≥ 5.4 (for `NoInfer`).
+ *
+ * @example — fully inferred (recommended)
+ * const store = createStore((set) => ({
  *   count: 0,
- *   user:  null,
- *   inc:   () => set((s) => ({ count: s.count + 1 })),
- *   login: (user) => set({ user }),
- *   reset: () => set(api.getInitialState()),
+ *   increment: () => set((s) => ({ count: s.count + 1 })),
+ *   //                       ^ s: { count: number; increment: () => void }
  * }));
  *
- * store.subscribe((state, prev) => {
- *   console.log("count:", state.count, "was:", prev.count);
- * });
+ * store.getState().count;       // number
+ * store.getState().increment(); // () => void
  *
- * store.bind(
- *   document.getElementById("counter")!,
- *   (s) => s.count,
- *   (count) => counterEl({ count }),
+ * @example — explicit generic for types inference can't resolve
+ * const store = createStore<{ count: number; user: User | null; login: (u: User) => void }>()(
+ *   (set, _get, api) => ({
+ *     count: 0,
+ *     user:  null,
+ *     login: (user) => set({ user }),
+ *     reset: () => set(api.getInitialState()),
+ *   })
  * );
- *
- * store.getState().inc();
  */
-export function createStore<T extends object>(creator: StateCreator<T>): StoreApi<T>;
+export function createStore<T extends object>(
+  creator: (set: SetState<NoInfer<T>>, get: GetState<NoInfer<T>>, api: StoreApi<NoInfer<T>>) => T,
+): StoreApi<T>;
+
 export function createStore<T extends object>(): (creator: StateCreator<T>) => StoreApi<T>;
+
 export function createStore<T extends object>(creatorOrNothing?: StateCreator<T>) {
   if (creatorOrNothing === undefined) {
-    // Curried form: createStore<T>()((set, get, api) => ...)
     return (creator: StateCreator<T>) => createStoreImpl(creator);
   }
   return createStoreImpl(creatorOrNothing);

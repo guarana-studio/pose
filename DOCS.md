@@ -201,7 +201,7 @@ loginForm();
 
 ### Tailwind and UnoCSS
 
-Add the `tailwind4` preset for a fluent, type-safe API over Tailwind utilities. All static class names are registered in the instance's class registry and can be extracted at build time via `getAllClasses()` or the `@poseui/extractor-unocss` extractor.
+Add the `tailwind4` preset for a fluent, type-safe API over Tailwind utilities. All static class names are registered in the instance's class registry and can be extracted at build time via `getAllClasses()` or the `poseui/unocss` extractor.
 
 ```ts
 import { createPose } from "poseui";
@@ -638,7 +638,7 @@ button({ variant: "destructive", size: "icon", disabled: true, child: "✕" });
 
 #### UnoCSS Extractor
 
-`@poseui/extractor-unocss` provides a UnoCSS extractor that statically analyses source files for poseui method call chains and emits the Tailwind class names they would produce at runtime — without executing the code.
+`poseui/unocss` provides a UnoCSS extractor that statically analyses source files for poseui method call chains and emits the Tailwind class names they would produce at runtime — without executing the code.
 
 ```ts
 // uno.config.ts

@@ -112,6 +112,43 @@ const form = html<Props>`
 form({ username: "ada", error: "Invalid password" });
 ```
 
+### Components
+
+`.handler()` closes a builder into a mountable component. It retains the element's call signature — still renderable as an HTML string — and gains `.mount(el, events, props?)` for writing `innerHTML`, wiring events, and getting a cleanup function back.
+
+Use `.on(selector, type, handler)` on the builder to register delegated event listeners that survive `render()` calls. Because `.on()` binds to the stable root element rather than inner nodes, the listeners stay active across every re-render — no `el.addEventListener` boilerplate needed inside `.handler()`. Use the `events` object for anything requiring the full `@poseui/on` API.
+
+```ts
+import { createPose, html } from "poseui";
+import { createEventMap } from "@poseui/on";
+import { z } from "zod";
+
+const pose = createPose({ presets: [tailwind4] });
+
+const counter = pose
+  .as("div")
+  .input(z.object({ count: z.number().default(0) }))
+  .flex()
+  .items_center()
+  .gap(4)
+  .child(
+    ({ count }) => html`
+      <span class="text-2xl font-bold">${count}</span>
+      <button type="button">+</button>
+    `,
+  )
+  .on("button", "click", () => store.getState().increment())
+  .handler(({ render }) => {
+    store.subscribe(
+      (s) => s.count,
+      (count) => render({ count }),
+    );
+  });
+
+const unmount = counter.mount(document.querySelector("#app")!, createEventMap());
+unmount();
+```
+
 ```bash
 bun add poseui
 bun add zod  # or valibot, arktype — any Standard Schema lib
@@ -179,20 +216,15 @@ bun add @poseui/form
 
 ## `@poseui/store`
 
-Reactive state backed by [alien-signals](https://github.com/stackblitz/alien-signals). Familiar if you know zustand — `createStore`, `getState`, `setState`, `subscribe` — plus `bind()`, which connects state directly to a pose element and handles re-rendering automatically.
+Reactive state backed by [alien-signals](https://github.com/stackblitz/alien-signals). Familiar if you know zustand — `createStore`, `getState`, `setState`, `subscribe` — plus `bind()`, which connects state directly to a DOM element and handles re-rendering automatically. Types are inferred from the creator — no annotation needed for simple state.
 
 ```ts
 import { createStore, effectScope } from "@poseui/store";
 
-const store = createStore<{
-  errors: Record<string, string[]>;
-  dirty: boolean;
-  setErrors: (e: Record<string, string[]>) => void;
-  markDirty: () => void;
-}>()((set) => ({
-  errors: {},
+const store = createStore((set) => ({
+  errors: {} as Record<string, string[]>,
   dirty: false,
-  setErrors: (errors) => set({ errors }),
+  setErrors: (errors: Record<string, string[]>) => set({ errors }),
   markDirty: () => set({ dirty: true }),
 }));
 
@@ -267,8 +299,8 @@ const errorMsg = pose
   .input(z.object({ message: z.string() }))
   .child(({ message }) => message);
 
-// submitBtn is a full component — styles, validation, event wiring,
-// and re-rendering are all defined in one place.
+// submitBtn is a full component — styles, schema, delegated events,
+// and reactive re-rendering all defined in one chain.
 const submitBtn = pose
   .as("button")
   .px(6)
@@ -288,14 +320,14 @@ const submitBtn = pose
   .attr("disabled", ({ disabled }) => (disabled ? "" : null))
   .attr("type", "submit")
   .child("Send message")
-  .handler(({ events, render }) => {
-    // Wire the click listener scoped to this component's root element.
-    events.target<HTMLButtonElement>("button[type=submit]").on("click", (e) => {
-      e.currentTarget.disabled = true;
-    });
-
-    // Re-render whenever dirty state changes — no external DOM reference needed.
-    store.subscribe((s) => render({ disabled: !s.dirty }));
+  .on("button[type=submit]", "click", (e) => {
+    (e.currentTarget as HTMLButtonElement).disabled = true;
+  })
+  .handler(({ render }) => {
+    store.subscribe(
+      (s) => s.dirty,
+      (dirty) => render({ disabled: !dirty }),
+    );
   });
 
 // ── Store ─────────────────────────────────────────────────────
@@ -349,8 +381,8 @@ effectScope(() => {
 
 // ── Mount ─────────────────────────────────────────────────────
 
-// submitBtn.mount() writes innerHTML, wires its own listeners, and returns
-// a cleanup. The shared EventMap also picks up the textarea character counter.
+// The shared EventMap handles listeners that belong outside submitBtn's scope.
+// submitBtn's own click handler is wired via .on() and needs no entry here.
 const events = createEventMap();
 
 events.target<HTMLTextAreaElement>("#message").on("input", (e) => {

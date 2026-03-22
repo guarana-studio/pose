@@ -168,6 +168,30 @@ pose
 
 **`.child(value | fn)`** — append children. Accepts a string, number, another `PoseElement`, an array of those, or `(props) => any of the above`. Chainable — call it multiple times to append in order.
 
+**`.on(selector, type, handler)`** — register a delegated event listener scoped to a CSS selector. Stored on the builder and wired at mount time onto the stable root element, so listeners survive `render()` calls that swap `innerHTML`. The selector is matched via `.closest()`, so clicks on child nodes inside the target are handled correctly. Can be chained multiple times for multiple targets or event types. All registrations are cleaned up when the component is unmounted.
+
+```ts
+pose
+  .as("div")
+  .input(z.object({ count: z.number().default(0) }))
+  .child(
+    ({ count }) => `
+    <span>${count}</span>
+    <button id="inc">+</button>
+    <button id="dec">-</button>
+  `,
+  )
+  .on("#inc", "click", () => store.getState().increment())
+  .on("#dec", "click", () => store.getState().decrement())
+  .handler(({ render }) => {
+    const unsub = store.subscribe(
+      (s) => s.count,
+      (count) => render({ count }),
+    );
+    return unsub; // called when the component is unmounted
+  });
+```
+
 **`.getClasses(props?)`** — returns the resolved class string for the given props without rendering a full HTML element. Useful for testing, introspection, or feeding classes into other systems:
 
 ```ts
@@ -216,19 +240,24 @@ const counter = pose
   .as("div")
   .cls("flex items-center gap-4")
   .input(z.object({ count: z.number().default(0) }))
-  .child(({ count }) => pose.as("span").cls("text-2xl font-bold").child(String(count)))
-  .child(pose.as("button").cls("btn").attr("type", "button").child("+"))
-  .handler(({ input, events, render }) => {
-    let count = input.count;
-
-    events.target<HTMLButtonElement>("button").on("click", () => {
-      render({ count: ++count });
-    });
+  .child(
+    ({ count }) => `
+    <span class="text-2xl font-bold">${count}</span>
+    <button type="button">+</button>
+  `,
+  )
+  .on("button", "click", () => store.getState().increment())
+  .handler(({ render }) => {
+    const unsub = store.subscribe(
+      (s) => s.count,
+      (count) => render({ count }),
+    );
+    return unsub; // called on unmount — unsubscribes from the store
   });
 
 const unmount = counter.mount(document.querySelector("#app")!, createEventMap());
 
-unmount(); // removes all listeners
+unmount(); // removes delegated listeners, events listeners, and calls the handler teardown
 ```
 
 The handler receives a context object with four keys:
@@ -239,18 +268,32 @@ The handler receives a context object with four keys:
 
 **`events`** — the event map passed to `.mount()`. Wire listeners here — they are scoped to `el` when `events.mount(el)` is called automatically after the handler returns. Pass a `createEventMap()` instance from [`@poseui/on`](../on).
 
-**`render(props?)`** — re-render the component with new props. Swaps `el.innerHTML` without touching the event listeners — since `@poseui/on` binds to CSS selectors rather than specific nodes, listeners automatically apply to the new children. Runs schema validation and defaults on every call.
+**`render(props?)`** — re-render the component with new props. Swaps `el.innerHTML` without touching event listeners or subscriptions — delegated listeners registered via `.on()` are bound to the stable root element and survive re-renders automatically. Runs schema validation and defaults on every call.
 
 ```ts
 .handler(({ input, el, events, render }) => {
   // input  — validated initial props
   // el     — the root DOM element, innerHTML already set
   // events — wire @poseui/on listeners here
-  // render — call to re-render; events stay mounted
+  // render — swaps innerHTML only; .on() listeners and subscriptions stay alive
+
+  const unsub = store.subscribe((s) => s.count, (count) => render({ count }));
+  return unsub; // optional teardown — return a function to run on unmount
 })
 ```
 
-`.mount()` returns the cleanup function from `events.mount()` — calling it removes every listener the event map attached.
+The handler may optionally return a teardown function. If returned, it is called when the component is unmounted — after delegated listener cleanup and `events` cleanup have run. Use it to unsubscribe from stores, cancel timers, or clean up any other side effects set up inside the handler.
+
+`.mount()` returns a cleanup function that removes every listener and calls the handler teardown — delegated `.on()` registrations, `events` map listeners, and the returned teardown are all called in that order.
+
+### Delegated listeners vs events
+
+`.on(selector, type, handler)` and the `events` object in `.handler()` serve different purposes:
+
+- **`.on()`** — use this for interactive elements inside the component's rendered content. Delegated to the root element, so listeners survive `render()` calls that swap `innerHTML`.
+- **`events`** — use this for anything that needs the full `@poseui/on` API (multi-element selectors via `.targets()`, pre-mount registration, sharing an event map across components).
+
+For most components, `.on()` alone is sufficient and the `events` parameter can be ignored entirely.
 
 ### Nesting components
 

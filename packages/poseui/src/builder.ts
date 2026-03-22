@@ -45,6 +45,20 @@ export type {
 } from "./types";
 
 // ---------------------------------------------------------------------------
+// Delegated listener entry
+//
+// Stored on BuilderState and wired at mount time as a single delegated
+// addEventListener on the root element. Because the listener is on the root
+// (which is never replaced by render()), it survives innerHTML swaps.
+// ---------------------------------------------------------------------------
+
+type DelegatedEntry = {
+  selector: string;
+  type: string;
+  handler: (e: Event) => void;
+};
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
@@ -140,6 +154,7 @@ function createBlankBuilder<TProps extends Record<string, unknown>>(
     classes: [],
     attrs: [],
     children: [],
+    delegated: [],
     schema: undefined,
     registry: undefined,
     presets,
@@ -159,6 +174,7 @@ export function createBuilder<
     extraClasses: ClassEntry<TProps>[] = [],
     extraChildren: Child<TProps>[] = [],
     extraAttrs: AttrEntry<TProps>[] = [],
+    extraDelegated: DelegatedEntry[] = [],
   ): PoseElement<TProps, TSchema, TTag> {
     if (state.registry) {
       for (const c of extraClasses) state.registry.add(c as ClassEntry<unknown>);
@@ -168,6 +184,7 @@ export function createBuilder<
       classes: [...state.classes, ...extraClasses],
       attrs: [...state.attrs, ...extraAttrs],
       children: [...state.children, ...extraChildren],
+      delegated: [...(state.delegated ?? []), ...extraDelegated],
     });
   }
 
@@ -220,6 +237,7 @@ export function createBuilder<
       classes: state.classes as unknown as ClassEntry<StandardSchemaV1.InferOutput<S>>[],
       attrs: state.attrs as unknown as AttrEntry<StandardSchemaV1.InferOutput<S>>[],
       children: state.children as unknown as Child<StandardSchemaV1.InferOutput<S>>[],
+      delegated: state.delegated,
       schema,
       registry: state.registry,
       presets: state.presets,
@@ -348,11 +366,36 @@ export function createBuilder<
       classes: [...state.classes],
       attrs: [...state.attrs],
       children: [...state.children, value],
+      delegated: state.delegated,
       registry: state.registry,
       presets: state.presets,
     });
 
+  // .on() — register a delegated event listener.
+  //
+  // Listeners are stored on state and wired at mount time as a single
+  // addEventListener on the root element (which is never replaced by render()).
+  // The selector is checked via .closest() so clicks on child elements inside
+  // the target (e.g. an icon inside a button) are handled correctly.
+  //
+  // Because delegation is on the root rather than the target node, these
+  // listeners survive innerHTML swaps from render() automatically — no need
+  // for the el.addEventListener + closest() pattern in handler().
+
+  el.on = <K extends keyof HTMLElementEventMap>(
+    selector: string,
+    type: K,
+    handler: (e: HTMLElementEventMap[K]) => void,
+  ): PoseElement<TProps, TSchema, TTag> =>
+    derive([], [], [], [{ selector, type, handler: handler as (e: Event) => void }]);
+
   // .handler() — closes the builder into a mountable Component
+  //
+  // The handler fn may optionally return a teardown function. If it does,
+  // that teardown is called when the component is unmounted — after the
+  // eventsCleanup and delegated listener cleanup have run. This is the
+  // correct place to unsubscribe from stores, cancel timers, or clean up
+  // any other side effects set up inside the handler.
   //
   // The returned Component is callable (same signature as the PoseElement) so
   // it can be used as a .child() or html`` slot without needing an independent
@@ -360,7 +403,7 @@ export function createBuilder<
   // for the whole tree via the shared EventMap.
 
   el.handler = <TEvents extends EventMap>(
-    fn: (ctx: HandlerContext<TProps, TEvents>) => void,
+    fn: (ctx: HandlerContext<TProps, TEvents>) => (() => void) | void,
   ): Component<TProps, TSchema, TEvents> => {
     // Shared schema resolution — used by the call signature, mount(), and render().
     function resolve(raw: unknown): TProps {
@@ -390,21 +433,42 @@ export function createBuilder<
       events: TEvents,
       ...args: CallArgs<TProps, TSchema>
     ): () => void {
-      // Initial render.
       const initialProps = resolve(args[0]);
       rootEl.innerHTML = buildHtml(initialProps);
 
-      // render() re-runs schema resolution and swaps innerHTML.
-      // Events stay mounted — @poseui/on binds to selectors, not nodes.
+      // render() swaps innerHTML only — delegated listeners on rootEl and any
+      // subscriptions set up in the handler stay alive across re-renders.
       function render(props?: Partial<TProps>): void {
         rootEl.innerHTML = buildHtml(resolve(props));
       }
 
-      // Run the handler so the caller can wire listeners and subscriptions.
-      fn({ input: initialProps, el: rootEl, events, render });
+      // Wire delegated .on() listeners onto the stable root element.
+      const delegatedCleanup: (() => void)[] = [];
+      for (const entry of state.delegated ?? []) {
+        const listener = (e: Event) => {
+          if ((e.target as Element).closest(entry.selector)) {
+            entry.handler(e);
+          }
+        };
+        rootEl.addEventListener(entry.type, listener);
+        delegatedCleanup.push(() => rootEl.removeEventListener(entry.type, listener));
+      }
 
-      // Mount events scoped to this element and return the cleanup.
-      return events.mount(rootEl);
+      // Run the handler. It may return a teardown function for cleaning up
+      // subscriptions, timers, or other side effects it set up.
+      const handlerTeardown = fn({ input: initialProps, el: rootEl, events, render });
+
+      const eventsCleanup = events.mount(rootEl);
+
+      // Return eventsCleanup directly when there is nothing else to tear down,
+      // preserving the reference for callers that assert cleanup === unmount.
+      if (delegatedCleanup.length === 0 && !handlerTeardown) return eventsCleanup;
+
+      return () => {
+        eventsCleanup();
+        for (const cleanup of delegatedCleanup) cleanup();
+        handlerTeardown?.();
+      };
     };
 
     // Mark as a PoseElement-compatible callable so renderChild and
@@ -445,6 +509,7 @@ export function createPose(options: CreatePoseOptions = {}): Pose {
         classes: [],
         attrs: [],
         children: [],
+        delegated: [],
         schema: undefined,
         registry,
         presets,

@@ -21,7 +21,7 @@
 //     basecoat CSS classes, not UnoCSS utilities, so UnoCSS doesn't need them
 //
 // Usage (uno.config.ts):
-//   import { extractorPoseui } from "@poseui/extractor-unocss";
+//   import { extractorPoseui } from "poseui/unocss";
 //
 //   export default defineConfig({
 //     extractors: [extractorPoseui()],
