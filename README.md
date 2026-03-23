@@ -125,6 +125,10 @@ import { z } from "zod";
 
 const pose = createPose({ presets: [tailwind4] });
 
+const store = createStore({ count: 0 }, (set) => ({
+  increment: () => set((s) => ({ count: s.count + 1 })),
+}));
+
 const counter = pose
   .as("div")
   .input(z.object({ count: z.number().default(0) }))
@@ -239,17 +243,23 @@ bun add @poseui/form
 
 ## `@poseui/store`
 
-Reactive state backed by [alien-signals](https://github.com/stackblitz/alien-signals). Familiar if you know zustand — `createStore`, `getState`, `setState`, `subscribe` — plus `bind()`, which connects state directly to a DOM element and handles re-rendering automatically. Types are inferred from the creator — no annotation needed for simple state.
+Reactive state backed by [alien-signals](https://github.com/stackblitz/alien-signals). Familiar if you know zustand — `createStore`, `getState`, `setState`, `subscribe` — plus `bind()`, which connects state directly to a DOM element and handles re-rendering automatically.
+
+Pass initial state as the first argument and an optional actions creator as the second. TypeScript infers everything — no annotation needed:
 
 ```ts
 import { createStore, effectScope } from "@poseui/store";
 
-const store = createStore((set) => ({
-  errors: {} as Record<string, string[]>,
-  dirty: false,
-  setErrors: (errors: Record<string, string[]>) => set({ errors }),
-  markDirty: () => set({ dirty: true }),
-}));
+const store = createStore(
+  {
+    errors: {} as Record<string, string[]>,
+    dirty: false,
+  },
+  (set) => ({
+    setErrors: (errors: Record<string, string[]>) => set({ errors }),
+    markDirty: () => set({ dirty: true }),
+  }),
+);
 
 // Re-renders only when errors change — other state changes are ignored
 const stop = effectScope(() => {
@@ -269,7 +279,6 @@ stop(); // tears down all bindings at once
 
 ```bash
 bun add @poseui/store
-bun add alien-signals
 ```
 
 ---
@@ -323,8 +332,6 @@ const errorMsg = pose
   .input(z.object({ message: z.string() }))
   .child(({ message }) => message);
 
-// submitBtn uses .on() for its click handler and .watch() for reactive
-// disabled state — no manual subscribe/teardown needed.
 const submitBtn = pose
   .as("button")
   .px(6)
@@ -351,19 +358,17 @@ const submitBtn = pose
 
 // ── Store ─────────────────────────────────────────────────────
 
-const store = createStore<{
-  errors: Record<string, string[]>;
-  dirty: boolean;
-  setErrors: (e: Record<string, string[]>) => void;
-  clearErrors: () => void;
-  markDirty: () => void;
-}>()((set) => ({
-  errors: {},
-  dirty: false,
-  setErrors: (errors) => set({ errors }),
-  clearErrors: () => set({ errors: {} }),
-  markDirty: () => set({ dirty: true }),
-}));
+const store = createStore(
+  {
+    errors: {} as Record<string, string[]>,
+    dirty: false,
+  },
+  (set) => ({
+    setErrors: (errors: Record<string, string[]>) => set({ errors }),
+    clearErrors: () => set({ errors: {} }),
+    markDirty: () => set({ dirty: true }),
+  }),
+);
 
 // ── Form ──────────────────────────────────────────────────────
 
