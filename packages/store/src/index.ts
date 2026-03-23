@@ -46,7 +46,7 @@ export interface StoreApi<T extends object> {
 
 type ActionsCreator<TState extends object, TActions extends object> = (
   set: SetState<TState>,
-  get: GetState<TState & TActions>,
+  get: GetState<any>,
   getInitialState: () => TState,
 ) => TActions;
 
@@ -148,7 +148,7 @@ export function createStore<TState extends object, TActions extends object = Rec
   const resolvedActions = actionsCreator
     ? actionsCreator(
         setState as unknown as SetState<TState>,
-        getState,
+        getState as GetState<any>,
         () => resolvedInitialState as unknown as TState,
       )
     : ({} as TActions);
