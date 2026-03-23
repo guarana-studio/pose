@@ -1,7 +1,7 @@
 {
   "name": "@poseui/store",
   "version": "0.0.1",
-  "description": "Typed store based on Signals.",
+  "description": "Typed vanilla store based on Signals.",
   "license": "MIT",
   "author": "Ryuz <ryuzer@proton.me>",
   "repository": {
@@ -25,7 +25,7 @@
     "cleanup": "rimraf dist node_modules"
   },
   "dependencies": {
-    "alien-signals": "^3.1.2"
+    "alien-signals": "3.1.2"
   },
   "peerDependencies": {
     "typescript": "^5"

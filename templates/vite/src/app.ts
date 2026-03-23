@@ -6,9 +6,8 @@ import { z } from "zod";
 
 export const pose = createPose({ presets: [tailwind4, reactive] });
 
-export const store = createStore((set) => ({
-  count: 0,
-  increment: () => set((state) => ({ count: state.count + 1 })),
+export const store = createStore({ count: 0 }, (set) => ({
+  increment: () => set((s) => ({ count: s.count + 1 })),
 }));
 
 export const app = pose

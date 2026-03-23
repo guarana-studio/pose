@@ -1,226 +1,76 @@
 // =============================================================================
 // @poseui/store — zustand-shaped reactive store backed by alien-signals
-//
-// Familiar API for anyone coming from zustand/vanilla, with one addition:
-// store.bind() closes the loop between state changes and pose re-renders.
 // =============================================================================
 
-import { signal, computed, effect, effectScope } from "alien-signals";
+import { signal, computed, effect } from "alien-signals";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * Partial state update — either a plain object merged shallowly into state,
- * or an updater function that receives the current state and returns a partial.
- */
-export type StateUpdate<T> = Partial<T> | ((state: T) => Partial<T>);
+export interface SetState<T> {
+  (update: Partial<T>): void;
+  (updater: (state: T) => Partial<T>): void;
+}
 
-/**
- * The `set` function passed to the state creator. Merges a partial update
- * into the current state.
- */
-export type SetState<T> = (update: StateUpdate<T>) => void;
-
-/**
- * The `get` function passed to the state creator. Returns the current state
- * snapshot synchronously.
- */
 export type GetState<T> = () => T;
-
-/**
- * A subscriber listening to state changes.
- * Receives the new state and the previous state.
- */
 export type Listener<T> = (state: T, prevState: T) => void;
-
-/**
- * A selector subscriber — fires only when the selected slice changes.
- * Receives the new slice and the previous slice.
- */
 export type SliceListener<_T, S> = (slice: S, prevSlice: S) => void;
-
-/** Returns an unsubscribe / cleanup function. */
 export type Unsub = () => void;
 
 export interface StoreApi<T extends object> {
-  /**
-   * Merge a partial update into state. Accepts either a plain object or an
-   * updater function that receives the current state.
-   *
-   * @example
-   * store.setState({ count: 5 })
-   * store.setState((s) => ({ count: s.count + 1 }))
-   */
-  setState(update: StateUpdate<T>): void;
-
-  /**
-   * Read the current state snapshot synchronously.
-   */
+  setState(update: Partial<T> | ((state: T) => Partial<T>)): void;
   getState(): T;
-
-  /**
-   * Read the state at the time the store was created.
-   * Useful as a reset reference.
-   */
   getInitialState(): T;
-
-  /**
-   * Subscribe to every state change.
-   * The listener receives `(newState, prevState)`.
-   * Returns an unsubscribe function.
-   *
-   * @example
-   * const unsub = store.subscribe((state, prev) => {
-   *   console.log("count changed from", prev.count, "to", state.count);
-   * });
-   */
   subscribe(listener: Listener<T>): Unsub;
-
-  /**
-   * Subscribe to a selected slice of state.
-   * The listener fires only when the selected value changes (by reference).
-   * Returns an unsubscribe function.
-   *
-   * @example
-   * const unsub = store.subscribe(
-   *   (s) => s.count,
-   *   (count, prev) => console.log("count:", count, "was:", prev),
-   * );
-   */
   subscribe<S>(selector: (state: T) => S, listener: SliceListener<T, S>): Unsub;
-
-  /**
-   * Bind a DOM element to a render function — re-renders `el.innerHTML`
-   * whenever any state changes.
-   *
-   * Returns an unsubscribe / cleanup function.
-   *
-   * @example
-   * store.bind(
-   *   document.getElementById("counter")!,
-   *   (state) => counterEl({ count: state.count }),
-   * );
-   */
   bind(el: Element, render: (state: T) => string): Unsub;
-
-  /**
-   * Bind a DOM element to a selected slice of state — re-renders
-   * `el.innerHTML` only when the selected slice changes (by reference).
-   *
-   * Returns an unsubscribe / cleanup function.
-   *
-   * @example
-   * store.bind(
-   *   document.getElementById("user")!,
-   *   (s) => s.user,
-   *   (user) => userEl({ name: user?.name ?? "Guest" }),
-   * );
-   */
   bind<S>(el: Element, selector: (state: T) => S, render: (slice: S) => string): Unsub;
 }
 
-/**
- * The state creator function passed to `createStore`.
- * Receives `set`, `get`, and the store API itself.
- */
-export type StateCreator<T extends object> = (
-  set: SetState<T>,
-  get: GetState<T>,
-  api: StoreApi<T>,
-) => T;
+// ---------------------------------------------------------------------------
+// ActionsCreator
+//
+// `set` and `get` are typed against TState only — actions patch state, they
+// don't set other actions. This breaks the TActions self-reference that was
+// causing the inference deadlock, and lets TypeScript infer TActions purely
+// from the return type of the creator.
+// ---------------------------------------------------------------------------
+
+type ActionsCreator<TState extends object, TActions extends object> = (
+  set: SetState<TState>,
+  get: GetState<TState>,
+  api: StoreApi<TState>,
+) => TActions;
 
 // ---------------------------------------------------------------------------
 // createStore
 // ---------------------------------------------------------------------------
 
-/**
- * Create a reactive store backed by alien-signals.
- *
- * The API mirrors zustand/vanilla: `getState`, `setState`, `subscribe`, and
- * `getInitialState`. One addition: `bind()` connects a DOM element directly
- * to state changes via a pose render function, eliminating manual `innerHTML`
- * management.
- *
- * State and action types are inferred automatically from the creator — no
- * type annotation required. `NoInfer<T>` on `set`/`get`/`api` ensures TypeScript
- * resolves `T` from the creator's return type first, then checks the parameters
- * against it — avoiding the circular inference that previously caused `state`
- * inside updater functions to fall back to `object`.
- *
- * Pass an explicit generic via the curried form when inference can't fully
- * resolve the type (e.g. `user: User | null` would infer as `user: null`).
- *
- * Requires TypeScript ≥ 5.4 (for `NoInfer`).
- *
- * @example — fully inferred (recommended)
- * const store = createStore((set) => ({
- *   count: 0,
- *   increment: () => set((s) => ({ count: s.count + 1 })),
- *   //                       ^ s: { count: number; increment: () => void }
- * }));
- *
- * store.getState().count;       // number
- * store.getState().increment(); // () => void
- *
- * @example — explicit generic for types inference can't resolve
- * const store = createStore<{ count: number; user: User | null; login: (u: User) => void }>()(
- *   (set, _get, api) => ({
- *     count: 0,
- *     user:  null,
- *     login: (user) => set({ user }),
- *     reset: () => set(api.getInitialState()),
- *   })
- * );
- */
-export function createStore<T extends object>(
-  creator: (set: SetState<NoInfer<T>>, get: GetState<NoInfer<T>>, api: StoreApi<NoInfer<T>>) => T,
-): StoreApi<T>;
+export function createStore<TState extends object>(initialState: TState): StoreApi<TState>;
 
-export function createStore<T extends object>(): (creator: StateCreator<T>) => StoreApi<T>;
+export function createStore<TState extends object, TActions extends object>(
+  initialState: TState,
+  actions: ActionsCreator<TState, TActions>,
+): StoreApi<TState & TActions>;
 
-export function createStore<T extends object>(creatorOrNothing?: StateCreator<T>) {
-  if (creatorOrNothing === undefined) {
-    return (creator: StateCreator<T>) => createStoreImpl(creator);
-  }
-  return createStoreImpl(creatorOrNothing);
-}
+export function createStore<TState extends object, TActions extends object = Record<never, never>>(
+  initialState: TState,
+  actionsCreator?: ActionsCreator<TState, TActions>,
+): StoreApi<TState & TActions> {
+  type T = TState & TActions;
 
-function createStoreImpl<T extends object>(creator: StateCreator<T>): StoreApi<T> {
-  // ---------------------------------------------------------------------------
-  // Core reactive atom — the entire state lives in a single signal so that
-  // `computed` slices derived from it automatically track dependencies.
-  // ---------------------------------------------------------------------------
+  const stateSignal = signal<T>({} as T);
 
-  // We initialise with a placeholder and replace it after the creator runs,
-  // so the creator can reference `api` during initialisation.
-  let stateSignal = signal<T>({} as T);
-
-  // ---------------------------------------------------------------------------
-  // setState — shallow merge, supports updater functions
-  // ---------------------------------------------------------------------------
-
-  function setState(update: StateUpdate<T>): void {
+  function setState(update: Partial<T> | ((state: T) => Partial<T>)): void {
     const current = stateSignal();
-    const patch = typeof update === "function" ? (update as (s: T) => Partial<T>)(current) : update;
+    const patch = typeof update === "function" ? update(current) : update;
     stateSignal({ ...current, ...patch });
   }
 
   function getState(): T {
     return stateSignal();
   }
-
-  // ---------------------------------------------------------------------------
-  // subscribe — two overloads
-  //
-  // subscribe(listener)                   → fires on every state change
-  // subscribe(selector, listener)         → fires only when slice changes
-  //
-  // Built on alien-signals' `effect`. Each effect re-runs whenever the signals
-  // it read during the previous run have changed. We capture the previous value
-  // manually so we can pass (newState, prevState) to the listener.
-  // ---------------------------------------------------------------------------
 
   function subscribe(listener: Listener<T>): Unsub;
   function subscribe<S>(selector: (state: T) => S, listener: SliceListener<T, S>): Unsub;
@@ -229,12 +79,10 @@ function createStoreImpl<T extends object>(creator: StateCreator<T>): StoreApi<T
     maybeListener?: SliceListener<T, S>,
   ): Unsub {
     if (maybeListener === undefined) {
-      // Full-state form
       const listener = listenerOrSelector as Listener<T>;
       let prev = stateSignal();
       let first = true;
-
-      const stop = effect(() => {
+      return effect(() => {
         const current = stateSignal();
         if (first) {
           first = false;
@@ -243,44 +91,24 @@ function createStoreImpl<T extends object>(creator: StateCreator<T>): StoreApi<T
         listener(current, prev);
         prev = current;
       });
-
-      return stop;
     }
 
-    // Selector form — only fire when the selected slice changes by reference
     const selector = listenerOrSelector as (state: T) => S;
-    const sliceListener = maybeListener;
-
-    // Use alien-signals' computed to derive the slice — the effect that reads
-    // it will only re-run when the computed output changes.
     const sliceComputed = computed(() => selector(stateSignal()));
     let prevSlice = sliceComputed();
     let first = true;
-
-    const stop = effect(() => {
+    return effect(() => {
       const currentSlice = sliceComputed();
       if (first) {
         first = false;
         return;
       }
       if (!Object.is(currentSlice, prevSlice)) {
-        sliceListener(currentSlice, prevSlice);
+        maybeListener(currentSlice, prevSlice);
         prevSlice = currentSlice;
       }
     });
-
-    return stop;
   }
-
-  // ---------------------------------------------------------------------------
-  // bind — connects a DOM element to state via a pose render function.
-  //
-  // Renders immediately on call (fire-immediately behaviour), then re-renders
-  // whenever the relevant state changes. Two overloads:
-  //
-  //   bind(el, render)                 → re-renders on any state change
-  //   bind(el, selector, render)       → re-renders only when slice changes
-  // ---------------------------------------------------------------------------
 
   function bind(el: Element, render: (state: T) => string): Unsub;
   function bind<S>(el: Element, selector: (state: T) => S, render: (slice: S) => string): Unsub;
@@ -290,59 +118,39 @@ function createStoreImpl<T extends object>(creator: StateCreator<T>): StoreApi<T
     maybeRender?: (slice: S) => string,
   ): Unsub {
     if (maybeRender === undefined) {
-      // Full-state form — re-render on any change
-      const render = renderOrSelector as (state: T) => string;
-
-      const stop = effect(() => {
-        el.innerHTML = render(stateSignal());
+      return effect(() => {
+        el.innerHTML = (renderOrSelector as (state: T) => string)(stateSignal());
       });
-
-      return stop;
     }
-
-    // Selector form — only re-render when the selected slice changes
-    const selector = renderOrSelector as (state: T) => S;
-    const render = maybeRender;
-    const sliceComputed = computed(() => selector(stateSignal()));
-
-    const stop = effect(() => {
-      el.innerHTML = render(sliceComputed());
+    const sliceComputed = computed(() => (renderOrSelector as (state: T) => S)(stateSignal()));
+    return effect(() => {
+      el.innerHTML = maybeRender(sliceComputed());
     });
-
-    return stop;
   }
 
-  // ---------------------------------------------------------------------------
-  // Assemble the api object before running the creator so actions can
-  // close over it (e.g. for reset: `set(store.getInitialState())`).
-  // ---------------------------------------------------------------------------
+  let resolvedInitialState: T;
 
   const api: StoreApi<T> = {
     setState,
     getState,
-    getInitialState: () => initialState,
+    getInitialState: () => resolvedInitialState,
     subscribe,
     bind,
   };
 
-  // Run the creator to get the initial state, then write it into the signal.
-  const initialState = creator(setState, getState, api);
-  stateSignal(initialState);
+  const resolvedActions = actionsCreator
+    ? // Cast: set/get are actually typed as T internally, TState is a safe view
+      actionsCreator(
+        setState as unknown as SetState<TState>,
+        getState as unknown as GetState<TState>,
+        api as unknown as StoreApi<TState>,
+      )
+    : ({} as TActions);
+
+  resolvedInitialState = { ...initialState, ...resolvedActions };
+  stateSignal(resolvedInitialState);
 
   return api;
 }
-
-// ---------------------------------------------------------------------------
-// effectScope re-export — convenience for grouping store subscriptions and
-// bindings so they can all be torn down with a single stop() call.
-//
-// @example
-// const stop = effectScope(() => {
-//   store.bind(el, (s) => s.count, (count) => counterEl({ count }));
-//   store.subscribe((s) => s.user, updateNav);
-// });
-//
-// stop(); // tears down all bindings and subscriptions at once
-// ---------------------------------------------------------------------------
 
 export { effectScope } from "alien-signals";

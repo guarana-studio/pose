@@ -1,11 +1,11 @@
 # @poseui/store
 
-Reactive state management for vanilla TypeScript, backed by [alien-signals](https://github.com/stackblitz/alien-signals). The API mirrors [zustand/vanilla](https://github.com/pmndrs/zustand) — `createStore`, `getState`, `setState`, `subscribe` — with one addition: `bind()` connects state directly to a DOM element via a pose render function, eliminating manual `innerHTML` management.
+Reactive state management for vanilla TypeScript, backed by [alien-signals](https://github.com/stackblitz/alien-signals).
 
 ```ts
 import { createStore } from "@poseui/store";
 import { createPose } from "poseui";
-import { tailwind4 } from "poseui/presets";
+import { tailwind4 } from "poseui/presets/tailwind4";
 
 const pose = createPose({ presets: [tailwind4] });
 
@@ -16,8 +16,7 @@ const counter = pose
   .input(z.object({ count: z.number() }))
   .child(({ count }) => `Count: ${count}`);
 
-const store = createStore<{ count: number; inc: () => void; dec: () => void }>()((set) => ({
-  count: 0,
+const store = createStore({ count: 0 }, (set) => ({
   inc: () => set((s) => ({ count: s.count + 1 })),
   dec: () => set((s) => ({ count: s.count - 1 })),
 }));
@@ -37,32 +36,27 @@ document.getElementById("dec")?.addEventListener("click", () => store.getState()
 
 ```bash
 bun add @poseui/store
-bun add alien-signals  # peer dependency
 ```
 
 ## Core concepts
 
-**`createStore(creator)`** — creates a store. The creator receives `set`, `get`, and the `api` object. Returns a `StoreApi` with `getState`, `setState`, `subscribe`, `getInitialState`, and `bind`.
+**`createStore(initialState, actions?)`** — creates a store. Pass initial state as a plain object as the first argument, and an optional actions creator as the second. The actions creator receives `set`, `get`, and the `api` object, and returns only the action functions. Returns a `StoreApi` with `getState`, `setState`, `subscribe`, `getInitialState`, and `bind`.
 
-**Two call forms** — simple state can be created without a type annotation; state with actions requires the curried form to break TypeScript's circular type inference:
+**No explicit generics needed** — TypeScript infers the state type from the first argument and the action types from the return value of the creator. No type annotations or curried forms required:
 
 ```ts
-// Simple — T inferred from the return value
-const store = createStore(() => ({ count: 0, name: "Ada" }));
+// State only — T inferred from the object literal
+const store = createStore({ count: 0, name: "Ada" });
 
-// With actions — use createStore<T>()((set, get, api) => ...) to fix T first
-const store = createStore<{
-  count: number;
-  inc: () => void;
-  reset: () => void;
-}>()((set, _get, api) => ({
-  count: 0,
+// State + actions — both inferred, no annotation needed
+const store = createStore({ count: 0 }, (set, _get, api) => ({
   inc: () => set((s) => ({ count: s.count + 1 })),
   reset: () => set(api.getInitialState()),
 }));
-```
 
-This is the same pattern as [zustand/vanilla](https://zustand.docs.pmnd.rs/apis/create-store).
+store.getState().count; // number ✓
+store.getState().inc; // () => void ✓
+```
 
 ---
 
@@ -92,11 +86,13 @@ Shallow merge — keys not included in the update are preserved. Actions survive
 
 ### `store.getInitialState()`
 
-Returns the state as returned by the creator — not affected by subsequent `setState` calls. Useful as a reset reference:
+Returns the original initial state object — not affected by subsequent `setState` calls. Useful as a reset reference:
 
 ```ts
 store.setState(store.getInitialState()); // reset to initial values
 ```
+
+Note: `getInitialState()` returns the state shape only (the first argument to `createStore`), not the action functions.
 
 ### `store.subscribe(listener)`
 
@@ -177,17 +173,16 @@ import { createStore, effectScope } from "@poseui/store";
 import { createForm } from "@poseui/form";
 import { z } from "zod";
 
-const store = createStore<{
-  errors: Record<string, string[]>;
-  submitted: boolean;
-  setErrors: (e: Record<string, string[]>) => void;
-  setSubmitted: () => void;
-}>()((set) => ({
-  errors: {},
-  submitted: false,
-  setErrors: (errors) => set({ errors }),
-  setSubmitted: () => set({ submitted: true }),
-}));
+const store = createStore(
+  {
+    errors: {} as Record<string, string[]>,
+    submitted: false,
+  },
+  (set) => ({
+    setErrors: (errors: Record<string, string[]>) => set({ errors }),
+    setSubmitted: () => set({ submitted: true }),
+  }),
+);
 
 const form = createForm({
   target: "#signup",
@@ -204,9 +199,6 @@ const form = createForm({
   validateOn: "change",
 });
 
-// Wire errors to DOM via pose
-const errorList = pose.as("ul").text_sm().text_color("red-600");
-
 store.bind(
   document.getElementById("errors")!,
   (s) => s.errors,
@@ -220,119 +212,6 @@ form.mount();
 ```
 
 ---
-
-## Full showcase
-
-A contact form where state, rendering, and events each have a clear owner:
-
-```ts
-import { createStore, effectScope } from "@poseui/store";
-import { createEventMap } from "@poseui/on";
-import { createForm } from "@poseui/form";
-import { createPose } from "poseui";
-import { tailwind4 } from "poseui/presets";
-import { z } from "zod";
-
-const pose = createPose({ presets: [tailwind4] });
-
-// ── Components ────────────────────────────────────────────────
-
-const errorMsg = pose
-  .as("p")
-  .text_sm()
-  .text_color("red-500")
-  .mt(1)
-  .input(z.object({ message: z.string() }))
-  .child(({ message }) => message);
-
-const submitBtn = pose
-  .as("button")
-  .px(6)
-  .py(2)
-  .rounded()
-  .font_semibold()
-  .transition()
-  .input(z.object({ disabled: z.boolean().default(false) }))
-  .when(
-    ({ disabled }) => disabled,
-    (b) => b.opacity(40).cursor_not_allowed(),
-  )
-  .when(
-    ({ disabled }) => !disabled,
-    (b) => b.bg("indigo-600").text_color("white"),
-  )
-  .attr("type", "submit")
-  .child("Send message");
-
-// ── Store ─────────────────────────────────────────────────────
-
-const store = createStore<{
-  errors: Record<string, string[]>;
-  dirty: boolean;
-  setErrors: (e: Record<string, string[]>) => void;
-  clearErrors: () => void;
-  markDirty: () => void;
-}>()((set) => ({
-  errors: {},
-  dirty: false,
-  setErrors: (errors) => set({ errors }),
-  clearErrors: () => set({ errors: {} }),
-  markDirty: () => set({ dirty: true }),
-}));
-
-// ── Form binding ──────────────────────────────────────────────
-
-const form = createForm({
-  target: "#contact",
-  schema: z.object({
-    email: z.string().email("Invalid email"),
-    message: z.string().min(10, "At least 10 characters"),
-  }),
-  validateOn: "change",
-  onSubmit() {
-    store.getState().clearErrors();
-  },
-  onError() {
-    store.getState().setErrors(form.errors());
-  },
-});
-
-form.mount();
-
-// ── DOM bindings ──────────────────────────────────────────────
-
-const stop = effectScope(() => {
-  store.bind(
-    document.getElementById("errors")!,
-    (s) => s.errors,
-    (errors) =>
-      Object.values(errors)
-        .flat()
-        .map((msg) => errorMsg({ message: msg }))
-        .join(""),
-  );
-
-  store.bind(
-    document.querySelector("[type=submit]")!,
-    (s) => s.dirty,
-    (dirty) => submitBtn({ disabled: !dirty }),
-  );
-});
-
-// ── Event wiring ──────────────────────────────────────────────
-
-const events = createEventMap();
-
-events.target<HTMLTextAreaElement>("#message").on("input", (e) => {
-  document.getElementById("char-count")!.textContent = `${e.currentTarget.value.length} / 500`;
-});
-
-events
-  .targets<HTMLInputElement | HTMLTextAreaElement>("#contact input, #contact textarea")
-  .on("change", () => store.getState().markDirty());
-
-events.mount();
-```
 
 ## License
 

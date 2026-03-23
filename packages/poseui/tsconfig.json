@@ -1,35 +1,15 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    // Environment setup & latest features
-    "lib": ["ESNext", "DOM"],
-    "target": "ESNext",
-    "module": "Preserve",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "allowJs": true,
-
-    // Bundler mode
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": true,
-
-    // Best practices
-    "strict": true,
-    "skipLibCheck": true,
-    "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-
-    // Some stricter flags (disabled by default)
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false,
-
+    "baseUrl": "./",
     "paths": {
       "poseui": ["./src/index.ts"],
       "poseui/presets/tailwind4": ["./src/presets/tailwind4/index.ts"],
-      "poseui/presets/basecoat": ["./src/presets/basecoat/index.ts"]
+      "poseui/presets/basecoat": ["./src/presets/basecoat/index.ts"],
+      "@poseui/match": ["../match/src/index.ts"],
+      "@poseui/store": ["../store/src/index.ts"]
     }
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["happydom.ts", "dist", "node_modules"]
 }

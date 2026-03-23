@@ -28,7 +28,7 @@ beforeEach(() => {
 
 describe("createStore()", () => {
   it("returns an object with the expected API", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     expect(typeof store.getState).toBe("function");
     expect(typeof store.setState).toBe("function");
     expect(typeof store.getInitialState).toBe("function");
@@ -36,28 +36,24 @@ describe("createStore()", () => {
     expect(typeof store.bind).toBe("function");
   });
 
-  it("initialises state from the creator return value", () => {
-    const store = createStore(() => ({ count: 42, name: "Ada" }));
+  it("initialises state from the initial state object", () => {
+    const store = createStore({ count: 42, name: "Ada" });
     expect(store.getState().count).toBe(42);
     expect(store.getState().name).toBe("Ada");
   });
 
-  it("passes set and get to the creator", () => {
-    const store = createStore<{ count: number; double: () => number; inc: () => void }>()(
-      (set, get) => ({
-        count: 0,
-        double: () => get().count * 2,
-        inc: () => set((s) => ({ count: s.count + 1 })),
-      }),
-    );
+  it("passes set and get to the actions creator", () => {
+    const store = createStore({ count: 0 }, (set, get) => ({
+      double: () => get().count * 2,
+      inc: () => set((s) => ({ count: s.count + 1 })),
+    }));
     store.getState().inc();
     expect(store.getState().count).toBe(1);
     expect(store.getState().double()).toBe(2);
   });
 
-  it("passes the api to the creator — actions can reference store.getInitialState()", () => {
-    const store = createStore<{ count: number; reset: () => void }>()((set, _get, api) => ({
-      count: 5,
+  it("passes the api to the actions creator — actions can reference api.getInitialState()", () => {
+    const store = createStore({ count: 5 }, (set, _get, api) => ({
       reset: () => set(api.getInitialState()),
     }));
     store.setState({ count: 99 });
@@ -72,18 +68,18 @@ describe("createStore()", () => {
 
 describe("getState()", () => {
   it("returns the current state", () => {
-    const store = createStore(() => ({ x: 1 }));
+    const store = createStore({ x: 1 });
     expect(store.getState().x).toBe(1);
   });
 
   it("reflects the latest setState", () => {
-    const store = createStore(() => ({ x: 1 }));
+    const store = createStore({ x: 1 });
     store.setState({ x: 99 });
     expect(store.getState().x).toBe(99);
   });
 
   it("returns a stable reference when state has not changed", () => {
-    const store = createStore(() => ({ x: 1 }));
+    const store = createStore({ x: 1 });
     const a = store.getState();
     const b = store.getState();
     expect(a).toBe(b);
@@ -95,14 +91,14 @@ describe("getState()", () => {
 // ---------------------------------------------------------------------------
 
 describe("getInitialState()", () => {
-  it("returns the original state from the creator", () => {
-    const store = createStore(() => ({ count: 7 }));
+  it("returns the original state passed to createStore", () => {
+    const store = createStore({ count: 7 });
     store.setState({ count: 99 });
     expect(store.getInitialState().count).toBe(7);
   });
 
   it("is not affected by subsequent setState calls", () => {
-    const store = createStore(() => ({ a: 1, b: 2 }));
+    const store = createStore({ a: 1, b: 2 });
     store.setState({ a: 100 });
     store.setState({ b: 200 });
     expect(store.getInitialState().a).toBe(1);
@@ -110,7 +106,7 @@ describe("getInitialState()", () => {
   });
 
   it("can be used to reset state", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     store.setState({ count: 50 });
     store.setState(store.getInitialState());
     expect(store.getState().count).toBe(0);
@@ -123,27 +119,27 @@ describe("getInitialState()", () => {
 
 describe("setState()", () => {
   it("merges a plain object shallowly", () => {
-    const store = createStore(() => ({ a: 1, b: 2 }));
+    const store = createStore({ a: 1, b: 2 });
     store.setState({ a: 10 });
     expect(store.getState().a).toBe(10);
     expect(store.getState().b).toBe(2); // untouched
   });
 
   it("accepts an updater function", () => {
-    const store = createStore(() => ({ count: 3 }));
+    const store = createStore({ count: 3 });
     store.setState((s) => ({ count: s.count * 2 }));
     expect(store.getState().count).toBe(6);
   });
 
   it("updater receives the latest state", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     store.setState({ count: 5 });
     store.setState((s) => ({ count: s.count + 1 }));
     expect(store.getState().count).toBe(6);
   });
 
   it("preserves keys not included in the partial update", () => {
-    const store = createStore(() => ({ x: 1, y: 2, z: 3 }));
+    const store = createStore({ x: 1, y: 2, z: 3 });
     store.setState({ z: 99 });
     expect(store.getState().x).toBe(1);
     expect(store.getState().y).toBe(2);
@@ -151,7 +147,7 @@ describe("setState()", () => {
   });
 
   it("applies multiple updates in sequence — last write wins per key", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     store.setState({ count: 1 });
     store.setState({ count: 2 });
     store.setState({ count: 3 });
@@ -159,8 +155,8 @@ describe("setState()", () => {
   });
 
   it("setting the same value does not change the state reference", () => {
-    const store = createStore(() => ({ count: 1 }));
-    const _before = store.getState();
+    const store = createStore({ count: 1 });
+    store.getState();
     store.setState({ count: 1 });
     // alien-signals may or may not produce a new object for same-value sets —
     // what matters is getState() returns consistent values
@@ -174,14 +170,14 @@ describe("setState()", () => {
 
 describe("subscribe() — full-state form", () => {
   it("returns an unsubscribe function", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const unsub = store.subscribe(mock());
     expect(typeof unsub).toBe("function");
     unsub();
   });
 
   it("fires the listener when state changes", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe(listener);
 
@@ -190,14 +186,14 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("does NOT fire on initial subscription (no fireImmediately)", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe(listener);
     expect(listener).not.toHaveBeenCalled();
   });
 
   it("passes (newState, prevState) to the listener", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe(listener);
 
@@ -208,7 +204,7 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("fires for every setState call", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe(listener);
 
@@ -219,7 +215,7 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("stops firing after unsubscribe", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     const unsub = store.subscribe(listener);
 
@@ -232,7 +228,7 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("unsubscribe is idempotent", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const unsub = store.subscribe(mock());
     expect(() => {
       unsub();
@@ -241,7 +237,7 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("multiple independent subscribers all receive changes", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const a = mock();
     const b = mock();
     store.subscribe(a);
@@ -253,7 +249,7 @@ describe("subscribe() — full-state form", () => {
   });
 
   it("unsubscribing one does not affect others", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const a = mock();
     const b = mock();
     const unsubA = store.subscribe(a);
@@ -273,7 +269,7 @@ describe("subscribe() — full-state form", () => {
 
 describe("subscribe() — selector form", () => {
   it("fires only when the selected slice changes", () => {
-    const store = createStore(() => ({ count: 0, name: "Ada" }));
+    const store = createStore({ count: 0, name: "Ada" });
     const listener = mock();
     store.subscribe((s) => s.count, listener);
 
@@ -285,7 +281,7 @@ describe("subscribe() — selector form", () => {
   });
 
   it("passes (newSlice, prevSlice) to the listener", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe((s) => s.count, listener);
 
@@ -296,14 +292,14 @@ describe("subscribe() — selector form", () => {
   });
 
   it("does NOT fire on initial subscription", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe((s) => s.count, listener);
     expect(listener).not.toHaveBeenCalled();
   });
 
   it("fires for each distinct value change", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     store.subscribe((s) => s.count, listener);
 
@@ -315,7 +311,7 @@ describe("subscribe() — selector form", () => {
 
   it("does NOT fire when the selected value is set to the same reference", () => {
     const obj = { id: 1 };
-    const store = createStore(() => ({ obj, other: 0 }));
+    const store = createStore({ obj, other: 0 });
     const listener = mock();
     store.subscribe((s) => s.obj, listener);
 
@@ -324,7 +320,7 @@ describe("subscribe() — selector form", () => {
   });
 
   it("stops firing after unsubscribe", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
     const unsub = store.subscribe((s) => s.count, listener);
 
@@ -336,7 +332,7 @@ describe("subscribe() — selector form", () => {
   });
 
   it("multiple selectors on the same store are independent", () => {
-    const store = createStore(() => ({ a: 0, b: 0 }));
+    const store = createStore({ a: 0, b: 0 });
     const listenerA = mock();
     const listenerB = mock();
     store.subscribe((s) => s.a, listenerA);
@@ -358,7 +354,7 @@ describe("subscribe() — selector form", () => {
 
 describe("bind() — full-state form", () => {
   it("renders immediately on bind", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -367,7 +363,7 @@ describe("bind() — full-state form", () => {
   });
 
   it("re-renders when state changes", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -377,7 +373,7 @@ describe("bind() — full-state form", () => {
   });
 
   it("returns an unsub function that stops re-renders", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -390,7 +386,7 @@ describe("bind() — full-state form", () => {
   });
 
   it("multiple bind calls on different elements are independent", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const root = fixture("<div id='a'></div><div id='b'></div>");
     const a = root.querySelector("#a")!;
     const b = root.querySelector("#b")!;
@@ -410,7 +406,7 @@ describe("bind() — full-state form", () => {
 
 describe("bind() — selector form", () => {
   it("renders immediately with the initial slice", () => {
-    const store = createStore(() => ({ count: 0, name: "Ada" }));
+    const store = createStore({ count: 0, name: "Ada" });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -423,7 +419,7 @@ describe("bind() — selector form", () => {
   });
 
   it("re-renders when the selected slice changes", () => {
-    const store = createStore(() => ({ count: 0, name: "Ada" }));
+    const store = createStore({ count: 0, name: "Ada" });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -437,7 +433,7 @@ describe("bind() — selector form", () => {
   });
 
   it("does NOT re-render when an unrelated slice changes", () => {
-    const store = createStore(() => ({ count: 0, name: "Ada" }));
+    const store = createStore({ count: 0, name: "Ada" });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -450,7 +446,7 @@ describe("bind() — selector form", () => {
   });
 
   it("returns an unsub that stops re-renders", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -467,7 +463,7 @@ describe("bind() — selector form", () => {
   });
 
   it("two selectors on the same element — last bind wins (overwrites innerHTML)", () => {
-    const store = createStore(() => ({ a: 0, b: 0 }));
+    const store = createStore({ a: 0, b: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -496,8 +492,7 @@ describe("bind() — selector form", () => {
 
 describe("actions in creator", () => {
   it("actions can call set", () => {
-    const store = createStore<{ count: number; inc: () => void; dec: () => void }>()((set) => ({
-      count: 0,
+    const store = createStore({ count: 0 }, (set) => ({
       inc: () => set((s) => ({ count: s.count + 1 })),
       dec: () => set((s) => ({ count: s.count - 1 })),
     }));
@@ -509,8 +504,7 @@ describe("actions in creator", () => {
   });
 
   it("actions can read state via get", () => {
-    const store = createStore<{ count: number; double: () => number }>()((set, get) => ({
-      count: 10,
+    const store = createStore({ count: 10 }, (_set, get) => ({
       double: () => get().count * 2,
     }));
 
@@ -519,8 +513,7 @@ describe("actions in creator", () => {
   });
 
   it("actions are preserved after setState", () => {
-    const store = createStore<{ count: number; inc: () => void }>()((set) => ({
-      count: 0,
+    const store = createStore({ count: 0 }, (set) => ({
       inc: () => set((s) => ({ count: s.count + 1 })),
     }));
 
@@ -530,8 +523,7 @@ describe("actions in creator", () => {
   });
 
   it("listeners fire when an action calls set", () => {
-    const store = createStore<{ count: number; inc: () => void }>()((set) => ({
-      count: 0,
+    const store = createStore({ count: 0 }, (set) => ({
       inc: () => set((s) => ({ count: s.count + 1 })),
     }));
 
@@ -552,7 +544,7 @@ describe("effectScope", () => {
   });
 
   it("stops all effects inside the scope when stop() is called", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const listener = mock();
 
     const stop = effectScope(() => {
@@ -569,7 +561,7 @@ describe("effectScope", () => {
   });
 
   it("stops all bind effects inside the scope", () => {
-    const store = createStore(() => ({ count: 0 }));
+    const store = createStore({ count: 0 });
     const el = fixture("<div id='target'></div>");
     const target = el.querySelector("#target")!;
 
@@ -586,7 +578,7 @@ describe("effectScope", () => {
   });
 
   it("groups multiple binds and subscriptions — one stop tears all down", () => {
-    const store = createStore(() => ({ count: 0, name: "Ada" }));
+    const store = createStore({ count: 0, name: "Ada" });
     const root = fixture("<div id='a'></div><div id='b'></div>");
     const a = root.querySelector("#a")!;
     const b = root.querySelector("#b")!;
@@ -625,13 +617,8 @@ describe("effectScope", () => {
 
 describe("integration", () => {
   it("form error state drives DOM via bind", () => {
-    const store = createStore<{
-      errors: Record<string, string>;
-      setErrors: (e: Record<string, string>) => void;
-      clearErrors: () => void;
-    }>()((set) => ({
-      errors: {} as Record<string, string>,
-      setErrors: (errors) => set({ errors }),
+    const store = createStore({ errors: {} as Record<string, string> }, (set) => ({
+      setErrors: (errors: Record<string, string>) => set({ errors }),
       clearErrors: () => set({ errors: {} }),
     }));
 
@@ -658,13 +645,9 @@ describe("integration", () => {
   });
 
   it("counter with computed-derived label", () => {
-    const store = createStore<{ count: number; inc: () => void; label: () => string }>()(
-      (set, get) => ({
-        count: 0,
-        inc: () => set((s) => ({ count: s.count + 1 })),
-        label: () => `Count: ${get().count}`,
-      }),
-    );
+    const store = createStore({ count: 0 }, (set) => ({
+      inc: () => set((s) => ({ count: s.count + 1 })),
+    }));
 
     const el = fixture("<div id='label'></div>");
     const target = el.querySelector("#label")!;
@@ -682,13 +665,10 @@ describe("integration", () => {
   });
 
   it("dirty flag store drives button disabled state", () => {
-    const store = createStore<{ dirty: boolean; markDirty: () => void; reset: () => void }>()(
-      (set) => ({
-        dirty: false,
-        markDirty: () => set({ dirty: true }),
-        reset: () => set({ dirty: false }),
-      }),
-    );
+    const store = createStore({ dirty: false }, (set) => ({
+      markDirty: () => set({ dirty: true }),
+      reset: () => set({ dirty: false }),
+    }));
 
     const el = fixture("<button id='btn'>Submit</button>");
     const btn = el.querySelector("#btn") as HTMLButtonElement;

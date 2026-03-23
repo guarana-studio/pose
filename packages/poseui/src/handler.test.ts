@@ -309,7 +309,7 @@ describe("HandlerContext.render", () => {
     const el = makeEl();
     let savedRender!: (props?: any) => void;
 
-    const _component = pose
+    pose
       .as("div")
       .input(z.object({ label: z.string().default("initial") }))
       .child(({ label }) => label)

@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "poseui": ["./packages/poseui/src/index.ts"],
+      "poseui/presets/tailwind4": ["./packages/poseui/src/presets/tailwind4/index.ts"],
+      "poseui/presets/basecoat": ["./packages/poseui/src/presets/basecoat/index.ts"],
+      "@poseui/match": ["./packages/match/src/index.ts"],
+      "@poseui/store": ["./packages/store/src/index.ts"],
+      "@poseui/on": ["./packages/on/src/index.ts"],
+      "@poseui/form": ["./packages/form/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*"],
+  "exclude": ["**/dist", "**/node_modules"]
+}
